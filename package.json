@@ -1,0 +1,79 @@
+{
+  "name": "claude-guard",
+  "version": "1.0.0",
+  "description": "Reliable permission system for Claude Code using PreToolUse hooks",
+  "keywords": [
+    "claude",
+    "claude-code",
+    "anthropic",
+    "permissions",
+    "hooks",
+    "security",
+    "guard"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/anthropics/claude-guard"
+  },
+  "bugs": {
+    "url": "https://github.com/anthropics/claude-guard/issues"
+  },
+  "homepage": "https://github.com/anthropics/claude-guard#readme",
+  "type": "module",
+  "exports": {
+    "./*": {
+      "import": "./dist/*.js",
+      "types": "./dist/*.d.ts"
+    }
+  },
+  "bin": {
+    "claude-guard": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "bin"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "build": "pnpm build:ts && pnpm build:es",
+    "build:ts": "tsc -p tsconfig.build.json",
+    "build:es": "tsx scripts/build.ts",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "concurrently --raw 'pnpm:lint:ts' 'pnpm:lint:es'",
+    "lint-fix": "concurrently --raw 'pnpm:lint:ts' 'pnpm:lint:es --fix'",
+    "lint:ts": "tsc --noEmit",
+    "lint:es": "eslint --max-warnings 0",
+    "prepublishOnly": "pnpm run build && pnpm run test",
+    "postinstall": "node bin/postinstall.js || true"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.30.0",
+    "@stylistic/eslint-plugin": "^5.7.0",
+    "@types/node": "^20.10.0",
+    "@types/picomatch": "^4.0.2",
+    "concurrently": "^9.2.1",
+    "esbuild": "^0.27.2",
+    "eslint": "^9.39.0",
+    "eslint-import-resolver-typescript": "^4.4.0",
+    "eslint-plugin-import-x": "^4.16.0",
+    "eslint-plugin-n": "^17.23.0",
+    "eslint-plugin-perfectionist": "^5.3.0",
+    "globals": "^16.3.0",
+    "tsx": "^4.21.0",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.35.0",
+    "vitest": "^1.0.0"
+  },
+  "dependencies": {
+    "jiti": "^2.6.1",
+    "picomatch": "^4.0.3",
+    "zod": "^4.3.6"
+  }
+}
