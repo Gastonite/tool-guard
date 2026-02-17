@@ -15,7 +15,10 @@
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
     "noUncheckedIndexedAccess": true,
-    "noEmit": true
+    "noEmit": true,
+    "paths": {
+      "~/*": ["./src/*"]
+    }
   },
   "include": ["src/**/*", "eslint.config.ts", "eslint.*.config.ts", "vitest.config.ts"],
   "exclude": ["node_modules", "dist"]

@@ -1,4 +1,7 @@
-import { ToolGuardFactory } from '../guard'
+import { PathExtractableFactory } from '~/extractables/factories/path'
+import { ToolGuardFactory } from '~/guard'
+import { stringPatternSchema } from '~/validation/stringPattern'
+import { PathBuildSuggestion } from './pathBuildSuggestion'
 
 
 
@@ -21,7 +24,9 @@ import { ToolGuardFactory } from '../guard'
 export const GrepToolGuard = ToolGuardFactory([
   {
     name: 'path',
-    type: 'path',
+    validableFactory: PathExtractableFactory({ scope: 'internalUnlessExternalPrefixed' }),
+    buildSuggestion: PathBuildSuggestion('path'),
+    patternSchema: stringPatternSchema,
   },
   'pattern',
 ])

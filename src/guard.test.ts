@@ -1,5 +1,10 @@
+import { dirname } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { PathExtractableFactory } from '~/extractables/factories/path'
+import { projectPathMock } from '../testing/setup'
 import { defineGuard, ToolGuardFactory } from './guard'
+import { PathBuildSuggestion } from './guards/pathBuildSuggestion'
+import { stringPatternSchema } from './validation/stringPattern'
 
 
 
@@ -10,7 +15,7 @@ describe('defineGuard', () => {
     const BashPolicy = ToolGuardFactory(['command'])
 
     const config = defineGuard({
-      Bash: BashPolicy({ allow: 'git *' }),
+      Bash: BashPolicy({ allow: ['git *'] }),
       TodoRead: true,
     })
 
@@ -23,20 +28,20 @@ describe('defineGuard', () => {
 
 describe('ToolGuardFactory', () => {
 
-  describe('simple format (auto-conversion)', () => {
+  describe('simple format', () => {
 
     const ReadPolicy = ToolGuardFactory(['file_path'])
 
     it('accepts simple { allow } format', () => {
 
-      const policy = ReadPolicy({ allow: 'src/*' })
+      const policy = ReadPolicy({ allow: ['src/*'] })
       expect(policy({ file_path: 'src/index.ts' })).toEqual({ allowed: true })
       expect(policy({ file_path: 'docs/index.md' }).allowed).toBe(false)
     })
 
     it('accepts simple { allow, deny } format', () => {
 
-      const policy = ReadPolicy({ allow: '*', deny: '*.env' })
+      const policy = ReadPolicy({ allow: ['*'], deny: ['*env'] })
       expect(policy({ file_path: 'src/index.ts' })).toEqual({ allowed: true })
       expect(policy({ file_path: '.env' }).allowed).toBe(false)
     })
@@ -54,24 +59,9 @@ describe('ToolGuardFactory', () => {
       const GrepPolicy = ToolGuardFactory(['path', 'pattern'])
 
       // Simple format applies to 'path' (first key)
-      const policy = GrepPolicy({ allow: 'src/*' })
+      const policy = GrepPolicy({ allow: ['src/*'] })
       expect(policy({ path: 'src/file.ts', pattern: 'anything' })).toEqual({ allowed: true })
       expect(policy({ path: 'tests/file.ts', pattern: 'anything' }).allowed).toBe(false)
-    })
-
-    it('accepts pattern array directly (shorthand)', () => {
-
-      const policy = ReadPolicy(['src/*', 'docs/*'])
-      expect(policy({ file_path: 'src/index.ts' })).toEqual({ allowed: true })
-      expect(policy({ file_path: 'docs/index.md' })).toEqual({ allowed: true })
-      expect(policy({ file_path: 'tests/index.ts' }).allowed).toBe(false)
-    })
-
-    it('accepts single pattern string directly (shorthand)', () => {
-
-      const policy = ReadPolicy('src/*')
-      expect(policy({ file_path: 'src/index.ts' })).toEqual({ allowed: true })
-      expect(policy({ file_path: 'docs/index.md' }).allowed).toBe(false)
     })
   })
 
@@ -79,71 +69,11 @@ describe('ToolGuardFactory', () => {
 
     const GrepPolicy = ToolGuardFactory(['path', 'pattern'])
 
-    describe('syntactic sugar', () => {
-
-      it('accepts wildcard string', () => {
-
-        const policy = GrepPolicy('*')
-        expect(policy({ pattern: 'anything', path: 'anywhere' })).toEqual({ allowed: true })
-      })
-
-      it('accepts a single rule (record)', () => {
-
-        const policy = GrepPolicy({ path: 'src/*' })
-        expect(policy({ pattern: 'anything', path: 'src/file.ts' })).toEqual({ allowed: true })
-        expect(policy({ pattern: 'anything', path: 'tests/file.ts' }).allowed).toBe(false)
-      })
-
-      it('accepts an array of rules', () => {
-
-        const policy = GrepPolicy([
-          { path: 'src/*' },
-          { pattern: 'TODO' },
-        ])
-
-        expect(policy({ pattern: 'anything', path: 'src/file.ts' })).toEqual({ allowed: true })
-        expect(policy({ pattern: 'TODO', path: 'docs/file.md' })).toEqual({ allowed: true })
-        expect(policy({ pattern: 'FIXME', path: 'docs/file.md' }).allowed).toBe(false)
-      })
-
-      it('accepts PolicyConfig object', () => {
-
-        const policy = GrepPolicy({
-          allow: { pattern: '*', path: 'src/*' },
-          deny: { pattern: 'password', path: '*' },
-        })
-
-        expect(policy({ pattern: 'TODO', path: 'src/file.ts' })).toEqual({ allowed: true })
-        expect(policy({ pattern: 'password', path: 'src/file.ts' }).allowed).toBe(false)
-      })
-    })
-
-    describe('Pattern in rules', () => {
-
-      it('accepts string instead of array in rule props', () => {
-
-        const policy = GrepPolicy({ allow: { pattern: 'TODO', path: 'src/*' } })
-        expect(policy({ pattern: 'TODO', path: 'src/file.ts' })).toEqual({ allowed: true })
-        expect(policy({ pattern: 'FIXME', path: 'src/file.ts' }).allowed).toBe(false)
-      })
-
-      it('accepts array in rule props', () => {
-
-        const policy = GrepPolicy({
-          allow: { pattern: ['TODO', 'FIXME'], path: 'src/*' },
-        })
-
-        expect(policy({ pattern: 'TODO', path: 'src/file.ts' })).toEqual({ allowed: true })
-        expect(policy({ pattern: 'FIXME', path: 'src/file.ts' })).toEqual({ allowed: true })
-        expect(policy({ pattern: 'HACK', path: 'src/file.ts' }).allowed).toBe(false)
-      })
-    })
-
     describe('optional props (default to wildcard)', () => {
 
       it('treats missing props as wildcard', () => {
 
-        const policy = GrepPolicy({ allow: { path: 'src/*' } })
+        const policy = GrepPolicy({ allow: [{ path: ['src/*'] }] })
 
         expect(policy({ pattern: 'anything', path: 'src/file.ts' })).toEqual({ allowed: true })
         expect(policy({ pattern: 'password', path: 'src/file.ts' })).toEqual({ allowed: true })
@@ -156,7 +86,7 @@ describe('ToolGuardFactory', () => {
       it('uses AND within a record (all props must match)', () => {
 
         const policy = GrepPolicy({
-          allow: { pattern: 'TODO', path: 'src/*' },
+          allow: [{ pattern: ['TODO'], path: ['src/*'] }],
         })
 
         expect(policy({ pattern: 'TODO', path: 'src/file.ts' })).toEqual({ allowed: true })
@@ -168,8 +98,8 @@ describe('ToolGuardFactory', () => {
 
         const policy = GrepPolicy({
           allow: [
-            { pattern: 'TODO', path: 'src/*' },
-            { pattern: 'FIXME', path: 'tests/*' },
+            { pattern: ['TODO'], path: ['src/*'] },
+            { pattern: ['FIXME'], path: ['tests/*'] },
           ],
         })
 
@@ -181,8 +111,8 @@ describe('ToolGuardFactory', () => {
       it('uses AND for deny (all props must match to deny)', () => {
 
         const policy = GrepPolicy({
-          allow: '*',
-          deny: { pattern: 'password', path: '*secret*' },
+          allow: [{ pattern: ['*'], path: ['*'] }],
+          deny: [{ pattern: ['password'], path: ['*secret*'] }],
         })
 
         expect(policy({ pattern: 'password', path: 'src/file.ts' })).toEqual({ allowed: true })
@@ -193,32 +123,32 @@ describe('ToolGuardFactory', () => {
       it('uses OR between deny records', () => {
 
         const policy = GrepPolicy({
-          allow: '*',
+          allow: [{ pattern: ['*'], path: ['*'] }],
           deny: [
-            { pattern: 'password', path: '*' },
-            { pattern: '*', path: '*node_modules*' },
+            { pattern: ['password'], path: ['*'] },
+            { pattern: ['*'], path: ['*node_modules*'] },
           ],
         })
 
         expect(policy({ pattern: 'password', path: 'src/file.ts' }).allowed).toBe(false)
-        expect(policy({ pattern: 'TODO', path: 'node_modules/pkg/file.js' }).allowed).toBe(false)
+        expect(policy({ pattern: 'TODO', path: 'src/node_modules/pkg/file.js' }).allowed).toBe(false)
         expect(policy({ pattern: 'TODO', path: 'src/file.ts' })).toEqual({ allowed: true })
       })
     })
 
     describe('wildcard allow', () => {
 
-      it('allows everything with allow: "*"', () => {
+      it('allows everything with allow: ["*"]', () => {
 
-        const policy = GrepPolicy({ allow: '*' })
+        const policy = GrepPolicy({ allow: ['*'] })
         expect(policy({ pattern: 'anything', path: 'anywhere/file.ts' })).toEqual({ allowed: true })
       })
 
       it('can be combined with deny', () => {
 
         const policy = GrepPolicy({
-          allow: '*',
-          deny: { pattern: 'secret', path: '*' },
+          allow: [{ pattern: ['*'], path: ['*'] }],
+          deny: [{ pattern: ['secret'], path: ['*'] }],
         })
 
         expect(policy({ pattern: 'TODO', path: 'src/file.ts' })).toEqual({ allowed: true })
@@ -233,35 +163,42 @@ describe('ToolGuardFactory', () => {
 
       const ReadPolicy = ToolGuardFactory(['path'])
 
-      it('handles empty string values', () => {
+      it('rejects empty string with * (OneOrMany)', () => {
 
-        const strict = ReadPolicy({ allow: 'src/*' })
-        expect(strict({ path: '' }).allowed).toBe(false)
-
-        const wildcard = ReadPolicy({ allow: '*' })
-        expect(wildcard({ path: '' })).toEqual({ allowed: true })
+        const wildcard = ReadPolicy({ allow: ['*'] })
+        expect(wildcard({ path: '' }).allowed).toBe(false)
       })
 
-      it('handles missing input props as empty string', () => {
+      it('accepts empty string when explicitly declared as pattern', () => {
 
-        const strict = ReadPolicy({ allow: 'src/*' })
-        expect(strict({}).allowed).toBe(false)
+        const withEmpty = ReadPolicy({ allow: ['*', ''] })
+        expect(withEmpty({ path: '' })).toEqual({ allowed: true })
+        expect(withEmpty({ path: 'anything' })).toEqual({ allowed: true })
+      })
 
-        const wildcard = ReadPolicy({ allow: '*' })
-        expect(wildcard({})).toEqual({ allowed: true })
+      it('rejects missing input props with * (OneOrMany)', () => {
+
+        const wildcard = ReadPolicy({ allow: ['*'] })
+        expect(wildcard({}).allowed).toBe(false)
+      })
+
+      it('accepts missing input props when empty string is declared', () => {
+
+        const withEmpty = ReadPolicy({ allow: ['*', ''] })
+        expect(withEmpty({})).toEqual({ allowed: true })
       })
 
       it('coerces non-string values to string', () => {
 
         const CountPolicy = ToolGuardFactory(['count'])
-        const policy = CountPolicy({ allow: '123' })
+        const policy = CountPolicy({ allow: ['123'] })
         expect(policy({ count: 123 })).toEqual({ allowed: true })
         expect(policy({ count: 456 }).allowed).toBe(false)
       })
 
       it('returns helpful reason and suggestion on deny', () => {
 
-        const policy = ReadPolicy({ allow: 'src/*' })
+        const policy = ReadPolicy({ allow: ['src/*'] })
         const result = policy({ path: 'tests/file.ts' })
 
         expect(result.allowed).toBe(false)
@@ -275,7 +212,7 @@ describe('ToolGuardFactory', () => {
 
       it('returns pattern info when denied by deny rule', () => {
 
-        const policy = ReadPolicy({ allow: '*', deny: '*secret*' })
+        const policy = ReadPolicy({ allow: ['*'], deny: ['*secret*'] })
         const result = policy({ path: 'src/secret/file.ts' })
 
         expect(result.allowed).toBe(false)
@@ -288,18 +225,25 @@ describe('ToolGuardFactory', () => {
 
       it('omitted deny allows everything', () => {
 
-        const policy = ReadPolicy({ allow: '*' })
+        const policy = ReadPolicy({ allow: ['*'] })
         expect(policy({ path: 'anything' })).toEqual({ allowed: true })
       })
     })
 
     describe('path extractor suggestions', () => {
 
-      const PathPolicy = ToolGuardFactory([{ name: 'file_path', type: 'path' }])
+      const PathPolicy = ToolGuardFactory([
+        {
+          name: 'file_path',
+          validableFactory: PathExtractableFactory({ scope: 'internal' }),
+          buildSuggestion: PathBuildSuggestion('file_path'),
+          patternSchema: stringPatternSchema,
+        },
+      ])
 
       it('suggests exact path and glob for nested paths', () => {
 
-        const policy = PathPolicy({ allow: 'src/*' })
+        const policy = PathPolicy({ allow: ['src/*'] })
         const result = policy({ file_path: 'docs/guide.md' })
 
         expect(result.allowed).toBe(false)
@@ -309,7 +253,7 @@ describe('ToolGuardFactory', () => {
 
       it('suggests exact path and * for root-level files', () => {
 
-        const policy = PathPolicy({ allow: 'src/*' })
+        const policy = PathPolicy({ allow: ['src/*'] })
         const result = policy({ file_path: 'README.md' })
 
         expect(result.allowed).toBe(false)
@@ -319,7 +263,7 @@ describe('ToolGuardFactory', () => {
 
       it('suggests * for empty path value', () => {
 
-        const policy = PathPolicy({ allow: 'src/*' })
+        const policy = PathPolicy({ allow: ['src/*'] })
         const result = policy({})
 
         expect(result.allowed).toBe(false)
@@ -329,7 +273,7 @@ describe('ToolGuardFactory', () => {
 
       it('suggests external: with resolved absolute for absolute paths', () => {
 
-        const policy = PathPolicy({ allow: 'src/*' })
+        const policy = PathPolicy({ allow: ['src/*'] })
         const result = policy({ file_path: '/etc/hosts' })
 
         expect(result.allowed).toBe(false)
@@ -339,10 +283,8 @@ describe('ToolGuardFactory', () => {
 
       it('suggests external: with resolved absolute for traversal paths', () => {
 
-        const projectPath = process.cwd()
-        const parentDir = projectPath.slice(0, projectPath.lastIndexOf('/'))
-
-        const policy = PathPolicy({ allow: 'src/*' })
+        const parentDir = dirname(projectPathMock)
+        const policy = PathPolicy({ allow: ['src/*'] })
         const result = policy({ file_path: '../secret.txt' })
 
         expect(result.allowed).toBe(false)
@@ -357,13 +299,13 @@ describe('ToolGuardFactory', () => {
 
       it('handles missing input props as empty string', () => {
 
-        const policy = GrepPolicy('*')
-        expect(policy({})).toEqual({ allowed: true })
+        const policy = GrepPolicy({ allow: [{ path: ['*'], pattern: ['*'] }] })
+        expect(policy({}).allowed).toBe(false)
       })
 
       it('returns helpful reason with prop name on deny', () => {
 
-        const policy = GrepPolicy({ path: 'src/*' })
+        const policy = GrepPolicy({ allow: [{ path: ['src/*'] }] })
         const result = policy({ pattern: 'TODO', path: 'tests/file.ts' })
 
         expect(result.allowed).toBe(false)
@@ -376,21 +318,21 @@ describe('ToolGuardFactory', () => {
 
       it('wildcard in one prop still requires other props to match', () => {
 
-        const policy = GrepPolicy({ pattern: '*', path: 'src/*' })
+        const policy = GrepPolicy({ allow: [{ pattern: ['*'], path: ['src/*'] }] })
         expect(policy({ pattern: 'anything', path: 'src/file.ts' })).toEqual({ allowed: true })
         expect(policy({ pattern: 'anything', path: 'tests/file.ts' }).allowed).toBe(false)
       })
 
       it('all props with same value', () => {
 
-        const policy = ToolGuardFactory(['a', 'b'])({ a: 'x', b: 'x' })
+        const policy = ToolGuardFactory(['a', 'b'])({ allow: [{ a: ['x'], b: ['x'] }] })
         expect(policy({ a: 'x', b: 'x' })).toEqual({ allowed: true })
         expect(policy({ a: 'x', b: 'y' }).allowed).toBe(false)
       })
 
       it('one prop missing in rule, one present', () => {
 
-        const policy = ToolGuardFactory(['a', 'b'])({ a: 'x' }) // b defaults to '*'
+        const policy = ToolGuardFactory(['a', 'b'])({ allow: [{ a: ['x'] }] }) // b defaults to '*'
         expect(policy({ a: 'x' })).toEqual({ allowed: true })
         expect(policy({ a: 'x', b: 'anything' })).toEqual({ allowed: true })
         expect(policy({ a: 'y', b: 'anything' }).allowed).toBe(false)
@@ -398,11 +340,11 @@ describe('ToolGuardFactory', () => {
 
       it('both props missing in input', () => {
 
-        const strict = ToolGuardFactory(['a', 'b'])({ a: 'x' })
+        const strict = ToolGuardFactory(['a', 'b'])({ allow: [{ a: ['x'] }] })
         expect(strict({}).allowed).toBe(false)
 
-        const wildcard = ToolGuardFactory(['a', 'b'])('*')
-        expect(wildcard({})).toEqual({ allowed: true })
+        const wildcard = ToolGuardFactory(['a', 'b'])({ allow: [{ a: ['*'], b: ['*'] }] })
+        expect(wildcard({}).allowed).toBe(false)
       })
     })
 
@@ -412,13 +354,13 @@ describe('ToolGuardFactory', () => {
 
       it('deny takes precedence over allow when both match', () => {
 
-        const policy = ReadPolicy({ allow: 'src/*', deny: 'src/*' })
+        const policy = ReadPolicy({ allow: ['src/*'], deny: ['src/*'] })
         expect(policy({ path: 'src/file.ts' }).allowed).toBe(false)
       })
 
       it('checks allow before deny (deny ignored if allow fails)', () => {
 
-        const policy = ReadPolicy({ allow: 'src/*', deny: '*' })
+        const policy = ReadPolicy({ allow: ['src/*'], deny: ['*'] })
         const result = policy({ path: 'other/file.ts' })
 
         expect(result.allowed).toBe(false)
@@ -428,65 +370,71 @@ describe('ToolGuardFactory', () => {
 
       it('evaluation order: allow first, then deny', () => {
 
-        const policy = ReadPolicy({ allow: '*', deny: 'secret/*' })
+        const policy = ReadPolicy({ allow: ['*'], deny: ['secret/*'] })
         expect(policy({ path: 'public/file.ts' })).toEqual({ allowed: true })
         expect(policy({ path: 'secret/file.ts' }).allowed).toBe(false)
       })
     })
 
-    describe('empty allow array (fail-safe)', () => {
+    describe('empty allow array (config error)', () => {
 
-      it('denies everything when allow is empty', () => {
+      it('rejects config with empty allow array', () => {
 
         const ReadPolicy = ToolGuardFactory(['path'])
+        // @ts-expect-error — testing runtime rejection of invalid config
         const policy = ReadPolicy({ allow: [] })
-        expect(policy({ path: 'anything' }).allowed).toBe(false)
+        const result = policy({ path: 'anything' })
+        expect(result.allowed).toBe(false)
+        expect(result).toHaveProperty('reason')
+        expect((result as { reason: string }).reason).toContain('Invalid policy config')
       })
 
-      it('empty allow with deny still denies everything', () => {
+      it('rejects config with empty allow and deny', () => {
 
         const ReadPolicy = ToolGuardFactory(['path'])
+        // @ts-expect-error — testing runtime rejection of invalid config
         const policy = ReadPolicy({ allow: [], deny: ['secret'] })
-        expect(policy({ path: 'public' }).allowed).toBe(false)
-        expect(policy({ path: 'secret' }).allowed).toBe(false)
+        const result = policy({ path: 'anything' })
+        expect(result.allowed).toBe(false)
+        expect((result as { reason: string }).reason).toContain('Invalid policy config')
       })
     })
 
     describe('invalid inputs', () => {
 
-      it('handles null in input object (coerced to empty string)', () => {
+      it('handles null in input object (coerced to empty string, rejected by OneOrMany)', () => {
 
         const ReadPolicy = ToolGuardFactory(['path'])
-        const policy = ReadPolicy({ allow: '*' })
+        const policy = ReadPolicy({ allow: ['*'] })
         // eslint-disable-next-line no-restricted-syntax -- testing null handling
-        expect(policy({ path: null as unknown as string })).toEqual({ allowed: true })
+        expect(policy({ path: null as unknown as string }).allowed).toBe(false)
       })
 
-      it('handles undefined in input object', () => {
+      it('handles undefined in input object (rejected by OneOrMany)', () => {
 
         const ReadPolicy = ToolGuardFactory(['path'])
-        const policy = ReadPolicy({ allow: '*' })
-        expect(policy({ path: undefined as unknown as string })).toEqual({ allowed: true })
+        const policy = ReadPolicy({ allow: ['*'] })
+        expect(policy({ path: undefined as unknown as string }).allowed).toBe(false)
       })
 
       it('handles object value (coerced to string)', () => {
 
         const ReadPolicy = ToolGuardFactory(['path'])
-        const policy = ReadPolicy({ allow: '*object*' })
+        const policy = ReadPolicy({ allow: ['*object*'] })
         expect(policy({ path: {} as unknown as string })).toEqual({ allowed: true })
       })
 
       it('handles array value (coerced to string)', () => {
 
         const ReadPolicy = ToolGuardFactory(['path'])
-        const policy = ReadPolicy({ allow: 'a,b' })
+        const policy = ReadPolicy({ allow: ['a,b'] })
         expect(policy({ path: ['a', 'b'] as unknown as string })).toEqual({ allowed: true })
       })
 
       it('handles boolean value (coerced to string)', () => {
 
         const ReadPolicy = ToolGuardFactory(['path'])
-        const policy = ReadPolicy({ allow: 'true' })
+        const policy = ReadPolicy({ allow: ['true'] })
         expect(policy({ path: true as unknown as string })).toEqual({ allowed: true })
         expect(policy({ path: false as unknown as string }).allowed).toBe(false)
       })
@@ -499,7 +447,7 @@ describe('ToolGuardFactory', () => {
 
     it('single argument works the same (backward compatible)', () => {
 
-      const guard = ReadPolicy({ allow: 'src/*', deny: '*.env' })
+      const guard = ReadPolicy({ allow: ['src/*'], deny: ['*.env'] })
       expect(guard({ path: 'src/file.ts' })).toEqual({ allowed: true })
       expect(guard({ path: 'src/.env' }).allowed).toBe(false)
       expect(guard({ path: 'docs/file.ts' }).allowed).toBe(false)
@@ -508,8 +456,8 @@ describe('ToolGuardFactory', () => {
     it('first-match: first scoped policy whose allow matches decides', () => {
 
       const guard = ReadPolicy(
-        { allow: 'src/*' },
-        { allow: 'tests/*' },
+        { allow: ['src/*'] },
+        { allow: ['tests/*'] },
       )
 
       expect(guard({ path: 'src/file.ts' })).toEqual({ allowed: true })
@@ -520,8 +468,8 @@ describe('ToolGuardFactory', () => {
     it('scoped deny does not leak to other policies', () => {
 
       const guard = ReadPolicy(
-        { allow: 'src/**', deny: '*test*' },
-        { allow: 'tests/**' },
+        { allow: ['src/**'], deny: ['*test*'] },
+        { allow: ['tests/**'] },
       )
 
       // Policy A allows, no deny match
@@ -537,8 +485,8 @@ describe('ToolGuardFactory', () => {
     it('order matters: first matching policy wins', () => {
 
       const guard = ReadPolicy(
-        { allow: 'src/**', deny: '*.ts' },
-        { allow: 'src/**' },
+        { allow: ['src/**'], deny: ['*.ts'] },
+        { allow: ['src/**'] },
       )
 
       // Policy A allows, deny matches → DENIED (Policy B not tried)
@@ -548,9 +496,9 @@ describe('ToolGuardFactory', () => {
     it('global deny: deny-only policy filters after first-match', () => {
 
       const guard = ReadPolicy(
-        { allow: 'src/**' },
-        { allow: 'tests/**' },
-        { deny: '*.env' },
+        { allow: ['src/**'] },
+        { allow: ['tests/**'] },
+        { deny: ['*.env'] },
       )
 
       expect(guard({ path: 'src/file.ts' })).toEqual({ allowed: true })
@@ -562,8 +510,8 @@ describe('ToolGuardFactory', () => {
     it('global deny message is distinct from scoped deny', () => {
 
       const guard = ReadPolicy(
-        { allow: '*' },
-        { deny: '*.env' },
+        { allow: ['*'] },
+        { deny: ['*.env'] },
       )
 
       const result = guard({ path: 'src/.env' })
@@ -575,9 +523,9 @@ describe('ToolGuardFactory', () => {
     it('global deny position in variadic does not matter', () => {
 
       const guard = ReadPolicy(
-        { deny: '*.env' },
-        { allow: 'src/**' },
-        { allow: 'tests/**' },
+        { deny: ['*.env'] },
+        { allow: ['src/**'] },
+        { allow: ['tests/**'] },
       )
 
       expect(guard({ path: 'src/file.ts' })).toEqual({ allowed: true })
@@ -586,7 +534,7 @@ describe('ToolGuardFactory', () => {
 
     it('deny-only alone denies everything (no scoped policies)', () => {
 
-      const guard = ReadPolicy({ deny: '*.env' })
+      const guard = ReadPolicy({ deny: ['*.env'] })
 
       expect(guard({ path: 'src/file.ts' }).allowed).toBe(false)
       expect(guard({ path: '.env' }).allowed).toBe(false)
@@ -599,7 +547,7 @@ describe('ToolGuardFactory', () => {
     it('invalid input in variadic returns error guard', () => {
 
       const guard = ReadPolicy(
-        { allow: 'src/**' },
+        { allow: ['src/**'] },
         // @ts-expect-error - testing invalid runtime input
         123,
       )
@@ -618,9 +566,8 @@ describe('ToolGuardFactory', () => {
       const GrepPolicy = ToolGuardFactory(['path', 'pattern'])
 
       // Valid configs
-      GrepPolicy({ path: 'src/*' })
-      GrepPolicy({ allow: '*' })
-      GrepPolicy({ allow: { path: 'src/*' } })
+      GrepPolicy({ allow: ['*'] })
+      GrepPolicy({ allow: [{ path: ['src/*'] }] })
 
       // @ts-expect-error - mixing rule props with config props is forbidden
       GrepPolicy({ path: 'src/*', allow: '*' })
@@ -629,35 +576,15 @@ describe('ToolGuardFactory', () => {
       GrepPolicy({ pattern: 'TODO', deny: '*' })
     })
 
-    it('requires at least one prop in MultiRule', () => {
+    it('empty allow array is config error', () => {
 
       const GrepPolicy = ToolGuardFactory(['path', 'pattern'])
 
-      // Valid: at least one prop
-      GrepPolicy({ path: 'src/*' })
-      GrepPolicy({ pattern: 'TODO' })
-      GrepPolicy({ pattern: 'TODO', path: 'src/*' })
-
-      // {} is accepted by TypeScript but rejected at runtime by Zod refine
-      GrepPolicy({})
-    })
-
-    it('empty allow array denies everything (fail-safe)', () => {
-
-      const GrepPolicy = ToolGuardFactory(['path', 'pattern'])
-
-      // Empty allow array is valid (fail-safe: denies everything)
+      // @ts-expect-error — testing runtime rejection of invalid config
       const policy = GrepPolicy({ allow: [] })
-      expect(policy({ path: 'anything', pattern: 'any' }).allowed).toBe(false)
-    })
-
-    it('empty rules array denies everything (fail-safe)', () => {
-
-      const GrepPolicy = ToolGuardFactory(['path', 'pattern'])
-
-      // Empty array is Pattern shorthand: [] → { allow: [] } → deny all
-      const policy = GrepPolicy([])
-      expect(policy({ path: 'anything', pattern: 'any' }).allowed).toBe(false)
+      const result = policy({ path: 'anything', pattern: 'any' })
+      expect(result.allowed).toBe(false)
+      expect((result as { reason: string }).reason).toContain('Invalid policy config')
     })
   })
 })

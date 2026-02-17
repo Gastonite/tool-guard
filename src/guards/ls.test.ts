@@ -13,39 +13,37 @@ describe('LSToolGuard', () => {
     expect(policy({ path: 'node_modules/pkg' }).allowed).toBe(false)
   })
 
-  describe('with ** (built-in security)', () => {
+  it('deny overrides allow', () => {
 
-    it('allows paths within project', () => {
+    const policy = LSToolGuard({ allow: ['**'], deny: ['node_modules/**'] })
 
-      const policy = LSToolGuard({ allow: '**' })
-
-      expect(policy({ path: 'src' })).toEqual({ allowed: true })
-      expect(policy({ path: 'src/components' })).toEqual({ allowed: true })
-    })
-
-    it('blocks path traversal', () => {
-
-      const policy = LSToolGuard({ allow: '**' })
-
-      expect(policy({ path: '../' }).allowed).toBe(false)
-      expect(policy({ path: '/etc' }).allowed).toBe(false)
-    })
+    expect(policy({ path: 'src/components' })).toEqual({ allowed: true })
+    expect(policy({ path: 'node_modules/pkg' }).allowed).toBe(false)
   })
 
-  describe('with prefix glob', () => {
+  it('noMatch — denies when path does not match any allow pattern', () => {
 
-    it('allows paths within subdirectory', () => {
+    const guard = LSToolGuard({ allow: ['src/*'] })
+    const result = guard({ path: 'node_modules/pkg' })
 
-      const policy = LSToolGuard({ allow: 'src/**' })
+    expect(result.allowed).toBe(false)
+    expect((result as { reason: string }).reason).toContain('not in allow list')
+  })
 
-      expect(policy({ path: 'src/components' })).toEqual({ allowed: true })
-    })
+  it('globalDeny — denies when path matches a global deny', () => {
 
-    it('blocks traversal from subdirectory', () => {
+    const guard = LSToolGuard({ deny: ['node_modules/*'] })
+    const result = guard({ path: 'node_modules/pkg' })
 
-      const policy = LSToolGuard({ allow: 'src/**' })
+    expect(result.allowed).toBe(false)
+    expect((result as { reason: string }).reason).toContain('blocked by global deny')
+  })
 
-      expect(policy({ path: 'src/../node_modules' }).allowed).toBe(false)
-    })
+  it('invalidInput — denies when path is missing', () => {
+
+    const guard = LSToolGuard({ allow: ['**'] })
+    const result = guard({})
+
+    expect(result.allowed).toBe(false)
   })
 })

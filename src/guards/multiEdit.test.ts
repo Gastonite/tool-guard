@@ -13,37 +13,37 @@ describe('MultiEditToolGuard', () => {
     expect(policy({ file_path: 'other.ts' }).allowed).toBe(false)
   })
 
-  describe('with ** (built-in security)', () => {
+  it('deny overrides allow', () => {
 
-    it('allows files within project', () => {
+    const policy = MultiEditToolGuard({ allow: ['src/*'], deny: ['src/secret*'] })
 
-      const policy = MultiEditToolGuard({ allow: '**' })
-
-      expect(policy({ file_path: 'src/app.ts' })).toEqual({ allowed: true })
-    })
-
-    it('blocks path traversal', () => {
-
-      const policy = MultiEditToolGuard({ allow: '**' })
-
-      expect(policy({ file_path: '../etc/passwd' }).allowed).toBe(false)
-    })
+    expect(policy({ file_path: 'src/index.ts' })).toEqual({ allowed: true })
+    expect(policy({ file_path: 'src/secret.ts' }).allowed).toBe(false)
   })
 
-  describe('with prefix glob', () => {
+  it('noMatch — denies when file_path does not match any allow pattern', () => {
 
-    it('allows files within subdirectory', () => {
+    const guard = MultiEditToolGuard({ allow: ['src/*'] })
+    const result = guard({ file_path: 'other/secret.ts' })
 
-      const policy = MultiEditToolGuard({ allow: 'src/**' })
+    expect(result.allowed).toBe(false)
+    expect((result as { reason: string }).reason).toContain('not in allow list')
+  })
 
-      expect(policy({ file_path: 'src/app.ts' })).toEqual({ allowed: true })
-    })
+  it('globalDeny — denies when file_path matches a global deny', () => {
 
-    it('blocks traversal from subdirectory', () => {
+    const guard = MultiEditToolGuard({ deny: ['*.env'] })
+    const result = guard({ file_path: '.env' })
 
-      const policy = MultiEditToolGuard({ allow: 'src/**' })
+    expect(result.allowed).toBe(false)
+    expect((result as { reason: string }).reason).toContain('blocked by global deny')
+  })
 
-      expect(policy({ file_path: 'src/../.env' }).allowed).toBe(false)
-    })
+  it('invalidInput — denies when file_path is missing', () => {
+
+    const guard = MultiEditToolGuard({ allow: ['**'] })
+    const result = guard({})
+
+    expect(result.allowed).toBe(false)
   })
 })

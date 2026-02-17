@@ -1,4 +1,5 @@
 import { type ToolGuardsConfig, type ValidationResult } from './guard'
+import { validationResultSchema } from './validation/config'
 
 
 
@@ -8,7 +9,11 @@ import { type ToolGuardsConfig, type ValidationResult } from './guard'
  * Logic:
  * 1. If tool not in config → DENY
  * 2. If policy is boolean → return allowed/denied directly
- * 3. If policy is function → execute and return result
+ * 3. If policy is function → execute and validate result with Zod
+ *
+ * Custom guard return values are validated with `validationResultSchema` to ensure
+ * `allowed` is a strict boolean (`true`/`false`), not a truthy value like `"yes"`.
+ * Invalid returns throw a ZodError, caught upstream as a deny (fail-safe).
  *
  * @param toolName - Name of the tool (e.g., 'Bash', 'Read')
  * @param toolInput - The tool's input object
@@ -37,6 +42,6 @@ export const checkPermissions = (
       ? { allowed: true }
       : { allowed: false, reason: 'Denied by policy', suggestion: `Set '${toolName}' to true` }
 
-  // ToolGuard function → execute
-  return policy(toolInput)
+  // ToolGuard function → execute and validate return type
+  return validationResultSchema.parse(policy(toolInput))
 }

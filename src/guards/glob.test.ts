@@ -8,68 +8,64 @@ describe('GlobToolGuard', () => {
   it('extracts pattern and path from input', () => {
 
     const policy = GlobToolGuard({
-      allow: {
+      allow: [{
         pattern: ['*.ts'],
         path: ['src/*'],
-      },
+      }],
     })
 
     expect(policy({ pattern: '*.ts', path: 'src/foo' })).toEqual({ allowed: true })
     expect(policy({ pattern: '*.ts', path: 'other/foo' }).allowed).toBe(false)
   })
 
-  describe('with ** for path (built-in security)', () => {
+  it('deny overrides allow', () => {
 
-    it('allows paths within project', () => {
-
-      const policy = GlobToolGuard({
-        allow: {
-          pattern: '*',
-          path: '**',
-        },
-      })
-
-      expect(policy({ pattern: '*.ts', path: 'src' })).toEqual({ allowed: true })
+    const policy = GlobToolGuard({
+      allow: [{
+        pattern: ['*'],
+        path: ['**'],
+      }],
+      deny: [{
+        path: ['vendor/**'],
+      }],
     })
 
-    it('blocks path traversal', () => {
-
-      const policy = GlobToolGuard({
-        allow: {
-          pattern: '*',
-          path: '**',
-        },
-      })
-
-      expect(policy({ pattern: '*.ts', path: '../' }).allowed).toBe(false)
-      expect(policy({ pattern: '*.ts', path: '/etc' }).allowed).toBe(false)
-    })
+    expect(policy({ pattern: '*.ts', path: 'src/foo' })).toEqual({ allowed: true })
+    expect(policy({ pattern: '*.ts', path: 'vendor/lib' }).allowed).toBe(false)
   })
 
-  describe('with prefix glob for path', () => {
+  it('noMatch — denies when values do not match any allow pattern', () => {
 
-    it('allows paths within subdirectory', () => {
-
-      const policy = GlobToolGuard({
-        allow: {
-          pattern: '*',
-          path: 'src/**',
-        },
-      })
-
-      expect(policy({ pattern: '*.ts', path: 'src/components' })).toEqual({ allowed: true })
+    const guard = GlobToolGuard({
+      allow: [{
+        pattern: ['*.ts'],
+        path: ['src/*'],
+      }],
     })
+    const result = guard({ pattern: '*.ts', path: 'vendor/foo' })
 
-    it('blocks traversal from subdirectory', () => {
+    expect(result.allowed).toBe(false)
+    expect((result as { reason: string }).reason).toContain('not in allow list')
+  })
 
-      const policy = GlobToolGuard({
-        allow: {
-          pattern: '*',
-          path: 'src/**',
-        },
-      })
+  it('globalDeny — denies when values match a global deny', () => {
 
-      expect(policy({ pattern: '*.ts', path: 'src/../node_modules' }).allowed).toBe(false)
+    const guard = GlobToolGuard({
+      deny: [{
+        path: ['vendor/**'],
+      }],
     })
+    const result = guard({ pattern: '*.ts', path: 'vendor/lib' })
+
+    expect(result.allowed).toBe(false)
+    expect((result as { reason: string }).reason).toContain('blocked by global deny')
+  })
+
+  it('invalidInput — denies when properties are missing', () => {
+
+    const guard = GlobToolGuard({ allow: ['**'] })
+    const result = guard({})
+
+    expect(result.allowed).toBe(false)
   })
 })

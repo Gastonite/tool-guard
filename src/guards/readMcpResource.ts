@@ -1,4 +1,4 @@
-import { ToolGuardFactory } from '../guard'
+import { ToolGuardFactory } from '~/guard'
 
 
 

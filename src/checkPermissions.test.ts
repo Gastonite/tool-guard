@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { checkPermissions } from './checkPermissions'
+import { command } from './command'
+import { greedy } from './extractables/greedy'
 import { type ToolGuardsConfig, ToolGuardFactory, type ValidationResult } from './guard'
 import { BashToolGuard } from './guards/bash'
 import { ReadToolGuard } from './guards/read'
@@ -14,15 +16,13 @@ describe('checkPermissions', () => {
     it('denies tool not in config', () => {
 
       const config: ToolGuardsConfig = {
-        Bash: BashToolGuard({ allow: ['git *'] }),
+        Bash: BashToolGuard({ allow: [command`git ${greedy}`] }),
       }
 
       const result = checkPermissions('Read', { file_path: 'test.ts' }, config)
       expect(result.allowed).toBe(false)
-      if (!result.allowed) {
-
+      if (!result.allowed)
         expect(result.reason).toContain('No policy for tool')
-      }
     })
 
     it('denies with empty config', () => {
@@ -53,10 +53,8 @@ describe('checkPermissions', () => {
 
       const result = checkPermissions('KillBash', {}, config)
       expect(result.allowed).toBe(false)
-      if (!result.allowed) {
-
+      if (!result.allowed)
         expect(result.reason).toBe('Denied by policy')
-      }
     })
   })
 
@@ -65,7 +63,7 @@ describe('checkPermissions', () => {
     it('allows when value matches allow pattern', () => {
 
       const config: ToolGuardsConfig = {
-        Bash: BashToolGuard({ allow: ['git *'] }),
+        Bash: BashToolGuard({ allow: [command`git ${greedy}`] }),
       }
 
       const result = checkPermissions('Bash', { command: 'git status' }, config)
@@ -75,15 +73,13 @@ describe('checkPermissions', () => {
     it('denies when value does not match any allow pattern', () => {
 
       const config: ToolGuardsConfig = {
-        Bash: BashToolGuard({ allow: ['git *'] }),
+        Bash: BashToolGuard({ allow: [command`git ${greedy}`] }),
       }
 
       const result = checkPermissions('Bash', { command: 'npm install' }, config)
       expect(result.allowed).toBe(false)
-      if (!result.allowed) {
-
+      if (!result.allowed)
         expect(result.reason).toContain('not in allow list')
-      }
     })
 
     it('allows with wildcard pattern', () => {
@@ -103,31 +99,41 @@ describe('checkPermissions', () => {
 
       const config: ToolGuardsConfig = {
         Bash: BashToolGuard({
-          allow: ['*'],
-          deny: ['rm -rf *'],
+          allow: [command`rm ${greedy}`],
+          deny: [command`rm -rf ${greedy}`],
         }),
       }
 
       const result = checkPermissions('Bash', { command: 'rm -rf /' }, config)
       expect(result.allowed).toBe(false)
-      if (!result.allowed) {
-
+      if (!result.allowed)
         expect(result.reason).toContain('blocked by deny pattern')
-      }
     })
 
-    it('deny takes priority over allow', () => {
+    it('deny takes priority over allow (internal)', () => {
 
       const config: ToolGuardsConfig = {
         Read: ReadToolGuard({
           allow: ['*'],
-          deny: ['/etc/shadow', '*.env'],
+          deny: ['*.env'],
         }),
       }
 
-      expect(checkPermissions('Read', { file_path: '/etc/shadow' }, config).allowed).toBe(false)
       expect(checkPermissions('Read', { file_path: '.env' }, config).allowed).toBe(false)
       expect(checkPermissions('Read', { file_path: 'config.ts' }, config).allowed).toBe(true)
+    })
+
+    it('deny takes priority over allow (external with prefix)', () => {
+
+      const config: ToolGuardsConfig = {
+        Read: ReadToolGuard({
+          allow: ['*', 'external:/etc/**'],
+          deny: ['external:/etc/shadow'],
+        }),
+      }
+
+      expect(checkPermissions('Read', { file_path: '/etc/hosts' }, config).allowed).toBe(true)
+      expect(checkPermissions('Read', { file_path: '/etc/shadow' }, config).allowed).toBe(false)
     })
   })
 
@@ -154,15 +160,11 @@ describe('checkPermissions', () => {
           const target = String(input['target'] ?? '')
           const combined = `${action}:${target}`
 
-          if (action === 'read') {
-
+          if (action === 'read')
             return { allowed: true }
-          }
 
-          if (action === 'write' && target.endsWith('.ts')) {
-
+          if (action === 'write' && target.endsWith('.ts'))
             return { allowed: true }
-          }
 
           return {
             allowed: false,
@@ -184,8 +186,8 @@ describe('checkPermissions', () => {
 
       const config: ToolGuardsConfig = {
         Bash: BashToolGuard({
-          allow: ['git *', 'npm *', 'pnpm *'],
-          deny: ['git push --force *', 'npm publish *'],
+          allow: [command`git ${greedy}`, command`npm ${greedy}`, command`pnpm ${greedy}`],
+          deny: [command`git push --force ${greedy}`, command`npm publish ${greedy}`],
         }),
         Read: ReadToolGuard({
           allow: ['**'],

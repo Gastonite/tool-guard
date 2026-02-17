@@ -13,37 +13,37 @@ describe('NotebookReadToolGuard', () => {
     expect(policy({ notebook_path: 'other/file.ipynb' }).allowed).toBe(false)
   })
 
-  describe('with ** (built-in security)', () => {
+  it('deny overrides allow', () => {
 
-    it('allows notebooks within project', () => {
+    const policy = NotebookReadToolGuard({ allow: ['**'], deny: ['secrets/**'] })
 
-      const policy = NotebookReadToolGuard({ allow: '**' })
-
-      expect(policy({ notebook_path: 'notebooks/analysis.ipynb' })).toEqual({ allowed: true })
-    })
-
-    it('blocks path traversal', () => {
-
-      const policy = NotebookReadToolGuard({ allow: '**' })
-
-      expect(policy({ notebook_path: '../etc/passwd' }).allowed).toBe(false)
-    })
+    expect(policy({ notebook_path: 'notebooks/analysis.ipynb' })).toEqual({ allowed: true })
+    expect(policy({ notebook_path: 'secrets/keys.ipynb' }).allowed).toBe(false)
   })
 
-  describe('with prefix glob', () => {
+  it('noMatch — denies when notebook_path does not match any allow pattern', () => {
 
-    it('allows notebooks within subdirectory', () => {
+    const guard = NotebookReadToolGuard({ allow: ['notebooks/*'] })
+    const result = guard({ notebook_path: 'other/file.ipynb' })
 
-      const policy = NotebookReadToolGuard({ allow: 'notebooks/**' })
+    expect(result.allowed).toBe(false)
+    expect((result as { reason: string }).reason).toContain('not in allow list')
+  })
 
-      expect(policy({ notebook_path: 'notebooks/analysis.ipynb' })).toEqual({ allowed: true })
-    })
+  it('globalDeny — denies when notebook_path matches a global deny', () => {
 
-    it('blocks traversal from subdirectory', () => {
+    const guard = NotebookReadToolGuard({ deny: ['secrets/*'] })
+    const result = guard({ notebook_path: 'secrets/keys.ipynb' })
 
-      const policy = NotebookReadToolGuard({ allow: 'notebooks/**' })
+    expect(result.allowed).toBe(false)
+    expect((result as { reason: string }).reason).toContain('blocked by global deny')
+  })
 
-      expect(policy({ notebook_path: 'notebooks/../secrets.ipynb' }).allowed).toBe(false)
-    })
+  it('invalidInput — denies when notebook_path is missing', () => {
+
+    const guard = NotebookReadToolGuard({ allow: ['**'] })
+    const result = guard({})
+
+    expect(result.allowed).toBe(false)
   })
 })

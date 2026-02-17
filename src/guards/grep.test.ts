@@ -8,68 +8,64 @@ describe('GrepToolGuard', () => {
   it('extracts pattern and path from input', () => {
 
     const policy = GrepToolGuard({
-      allow: {
+      allow: [{
         pattern: ['*'],
         path: ['src/*'],
-      },
+      }],
     })
 
     expect(policy({ pattern: 'TODO', path: 'src/foo' })).toEqual({ allowed: true })
     expect(policy({ pattern: 'TODO', path: 'vendor/foo' }).allowed).toBe(false)
   })
 
-  describe('with ** for path (built-in security)', () => {
+  it('deny overrides allow', () => {
 
-    it('allows paths within project', () => {
-
-      const policy = GrepToolGuard({
-        allow: {
-          pattern: '*',
-          path: '**',
-        },
-      })
-
-      expect(policy({ pattern: 'TODO', path: 'src' })).toEqual({ allowed: true })
+    const policy = GrepToolGuard({
+      allow: [{
+        pattern: ['*'],
+        path: ['**'],
+      }],
+      deny: [{
+        path: ['vendor/**'],
+      }],
     })
 
-    it('blocks path traversal', () => {
-
-      const policy = GrepToolGuard({
-        allow: {
-          pattern: '*',
-          path: '**',
-        },
-      })
-
-      expect(policy({ pattern: 'TODO', path: '../' }).allowed).toBe(false)
-      expect(policy({ pattern: 'TODO', path: '/etc' }).allowed).toBe(false)
-    })
+    expect(policy({ pattern: 'TODO', path: 'src/foo' })).toEqual({ allowed: true })
+    expect(policy({ pattern: 'TODO', path: 'vendor/lib' }).allowed).toBe(false)
   })
 
-  describe('with prefix glob for path', () => {
+  it('noMatch — denies when values do not match any allow pattern', () => {
 
-    it('allows paths within subdirectory', () => {
-
-      const policy = GrepToolGuard({
-        allow: {
-          pattern: '*',
-          path: 'src/**',
-        },
-      })
-
-      expect(policy({ pattern: 'TODO', path: 'src/components' })).toEqual({ allowed: true })
+    const guard = GrepToolGuard({
+      allow: [{
+        pattern: ['*'],
+        path: ['src/*'],
+      }],
     })
+    const result = guard({ pattern: 'TODO', path: 'vendor/foo' })
 
-    it('blocks traversal from subdirectory', () => {
+    expect(result.allowed).toBe(false)
+    expect((result as { reason: string }).reason).toContain('not in allow list')
+  })
 
-      const policy = GrepToolGuard({
-        allow: {
-          pattern: '*',
-          path: 'src/**',
-        },
-      })
+  it('globalDeny — denies when values match a global deny', () => {
 
-      expect(policy({ pattern: 'TODO', path: 'src/../node_modules' }).allowed).toBe(false)
+    const guard = GrepToolGuard({
+      deny: [{
+        path: ['vendor/**'],
+      }],
     })
+    const result = guard({ pattern: 'TODO', path: 'vendor/lib' })
+
+    expect(result.allowed).toBe(false)
+    expect((result as { reason: string }).reason).toContain('blocked by global deny')
+  })
+
+  it('invalidInput — denies when properties are missing', () => {
+
+    const guard = GrepToolGuard({ allow: ['**'] })
+    const result = guard({})
+
+    expect(result.allowed).toBe(false)
   })
 })

@@ -10,6 +10,11 @@ const testDir = join(tmpdir(), 'claude-guard-test')
 
 beforeAll(() => {
 
+  // jiti loads modules at runtime outside of vitest's module system,
+  // so vi.mock doesn't apply. The real config/projectPath.ts runs and
+  // throws if CLAUDE_PROJECT_DIR is not set or not a valid directory.
+  process.env['CLAUDE_PROJECT_DIR'] = testDir
+
   if (existsSync(testDir))
     rmSync(testDir, { recursive: true })
 
@@ -18,6 +23,7 @@ beforeAll(() => {
 
 afterAll(() => {
 
+  delete process.env['CLAUDE_PROJECT_DIR']
   rmSync(testDir, { recursive: true })
 })
 
@@ -56,9 +62,10 @@ describe('loadPermissionsConfig', () => {
       export default {
         Bash: (input) => {
           const cmd = String(input.command ?? '')
-          if (cmd.startsWith('git ')) {
+
+          if (cmd.startsWith('git ')) 
             return { allowed: true }
-          }
+          
           return { allowed: false, reason: 'Not git', suggestion: 'Use git' }
         },
       }
@@ -67,7 +74,7 @@ describe('loadPermissionsConfig', () => {
     const result = await loadConfig(configPath)
 
     expect(result?.['Bash']).toBeDefined()
-    expect(typeof result?.['Bash']).toBe('function')
+    expect(result?.['Bash']).toBeTypeOf('function')
 
     // Test the function works
     const policy = result?.['Bash']
@@ -82,11 +89,15 @@ describe('loadPermissionsConfig', () => {
 
     const configPath = join(testDir, 'config-factory.ts')
     writeFileSync(configPath, `
-      import { BashToolGuard } from '${process.cwd()}/src/guards/bash'
       import { ReadToolGuard } from '${process.cwd()}/src/guards/read'
 
       export default {
-        Bash: BashToolGuard({ allow: ['git *', 'pnpm *'] }),
+        Bash: (input) => {
+          const cmd = String(input.command ?? '')
+          return cmd.startsWith('git ')
+            ? { allowed: true }
+            : { allowed: false, reason: 'Command not allowed', suggestion: 'Use git only' }
+        },
         Read: ReadToolGuard({
           allow: ['*'],
           deny: ['/etc/shadow'],
@@ -98,8 +109,8 @@ describe('loadPermissionsConfig', () => {
 
     expect(result?.['Bash']).toBeDefined()
     expect(result?.['Read']).toBeDefined()
-    expect(typeof result?.['Bash']).toBe('function')
-    expect(typeof result?.['Read']).toBe('function')
+    expect(result?.['Bash']).toBeTypeOf('function')
+    expect(result?.['Read']).toBeTypeOf('function')
 
     // Test the policies work
     const bashPolicy = result?.['Bash']
@@ -138,7 +149,7 @@ describe('loadPermissionsConfig', () => {
 
     expect(result?.['TodoRead']).toBe(true)
     expect(result?.['KillBash']).toBe(false)
-    expect(typeof result?.['Bash']).toBe('function')
+    expect(result?.['Bash']).toBeTypeOf('function')
   })
 
   it('loads JavaScript config with ESM default export', async () => {
@@ -156,6 +167,6 @@ describe('loadPermissionsConfig', () => {
     const result = await loadConfig(configPath)
 
     expect(result?.['TodoRead']).toBe(true)
-    expect(typeof result?.['Bash']).toBe('function')
+    expect(result?.['Bash']).toBeTypeOf('function')
   })
 })

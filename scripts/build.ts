@@ -1,6 +1,6 @@
 import * as esbuild from 'esbuild'
 import { readdir } from 'node:fs/promises'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 
 
 
@@ -19,6 +19,7 @@ const buildCli = () => esbuild.build({
   outfile: 'dist/cli.js',
   bundle: true,
   minify: true,
+  alias: { '~': resolve('src') },
   // Externalize Node.js built-ins and all node_modules (jiti uses dynamic requires)
   packages: 'external',
   banner: {
@@ -40,20 +41,30 @@ const getEntryPoints = async (dir: string): Promise<Array<string>> => {
 const buildLibrary = async () => {
 
   const directories = [
-    'matchers',
+    'config',
+    'extractables',
+    'extractables/factories',
+    'extractables/factories/utilities',
+    'extractables/utilities',
     'guards',
+    'types',
     'utilities',
     'validation',
-    'validation/validators',
   ]
 
   const entryPoints: Array<string> = [
     'src/checkPermissions.ts',
+    'src/command.ts',
+    'src/extractable.ts',
+    'src/field.ts',
+    'src/globPolicyEvaluator.ts',
     'src/guard.ts',
     'src/io.ts',
     'src/logger.ts',
     'src/policy.ts',
+    'src/policyEvaluator.ts',
     'src/rule.ts',
+    'src/validable.ts',
   ]
 
   for (const directory of directories)

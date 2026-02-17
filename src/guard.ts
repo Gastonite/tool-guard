@@ -1,20 +1,19 @@
-import { type PolicyInput, Policy } from './policy'
+import { type z } from 'zod'
+import { Field, type FieldDefinition, type InferPatternMap } from './field'
+import { type PolicyInput, type StructuredPolicyDefinition, Policy } from './policy'
+import { acceptAllSymbol, type ParsedPolicy, PolicyEvaluator } from './policyEvaluator'
 import { type Rule } from './rule'
-import { type Extractor, type ExtractorType } from './types/Extractor'
 import { type NonEmptyArray } from './types/NonEmptyArray'
-import { resolveProjectPath } from './utilities/resolveProjectPath'
-import { extractorsSchema } from './validation/guard'
+import { type validationResultSchema } from './validation/config'
 
 
 
 /**
  * Result of a policy validation.
  * Discriminated union: reason and suggestion required when denied.
+ * Inferred from `validationResultSchema` (single source of truth).
  */
-export type ValidationResult = (
-  | { allowed: true }
-  | { allowed: false; reason: string; suggestion: string }
-)
+export type ValidationResult = z.infer<typeof validationResultSchema>
 
 /**
  * A tool guard is a function that validates tool input.
@@ -36,71 +35,55 @@ export const defineGuard = <T extends ToolGuardsConfig>(config: T): T => config
 
 
 /**
- * Input type for ToolGuardFactory.
- * Decoupled from PolicyInput to allow independent evolution.
+ * User-facing input type for ToolGuardFactory.
+ * Typed with the inferred pattern map for compile-time safety.
  */
-export type ToolGuardFactoryInput<TKeys extends string> = PolicyInput<TKeys>
+export type ToolGuardFactoryInput<TPatternMap extends Record<string, unknown>> = (
+  | { allow?: TPatternMap[keyof TPatternMap]; deny?: TPatternMap[keyof TPatternMap] }
+  | StructuredPolicyDefinition<TPatternMap>
+)
 
 /**
  * A factory that creates ToolGuard functions from policy config.
  */
-export type ToolGuardFactory<TKeys extends string> = (
-  ...configs: Array<ToolGuardFactoryInput<TKeys>>
+export type ToolGuardFactory<TPatternMap extends Record<string, unknown>> = (
+  ...configs: Array<ToolGuardFactoryInput<TPatternMap>>
 ) => ToolGuard
 
 
 /**
- * Extractor definition: string shorthand or object with type.
- * - `'file_path'` → `{ name: 'file_path' }`
- * - `{ name: 'file_path', type: 'path' }` → path extractor with picomatch + security
- */
-export type ExtractorDefinition<TKeys extends string> = TKeys | { name: TKeys; type: ExtractorType }
-
-/**
- * Creates a ToolGuardFactory for the given extractors.
+ * Creates a ToolGuardFactory for the given fields.
  *
- * @param definitions - Non-empty array of extractor definitions.
- *                      First element is the "default extractor" used for simple format.
+ * @param definitions - Non-empty array of field definitions.
+ *                      First element is the "default field" used for simple format.
  *
  * @example
- * // Path guard with built-in security
- * const ReadToolGuard = ToolGuardFactory([{ name: 'file_path', type: 'path' }])
+ * // String field with glob matching
+ * const ReadToolGuard = ToolGuardFactory([{ name: 'file_path' }])
  * ReadToolGuard({ allow: ['src/**'], deny: ['**\/.env'] })
  *
  * @example
  * // Multi-prop guard with mixed types
- * const GrepToolGuard = ToolGuardFactory([{ name: 'path', type: 'path' }, 'pattern'])
+ * const GrepToolGuard = ToolGuardFactory([{ name: 'path' }, 'pattern'])
  * GrepToolGuard({ allow: ['src/**'] })  // → applies to 'path', 'pattern' defaults to '*'
  */
-export const ToolGuardFactory = <const TKeys extends string>(
-  definitions: NonEmptyArray<ExtractorDefinition<TKeys>>,
-): ToolGuardFactory<TKeys> => {
+export const ToolGuardFactory = <
+  const TDefs extends NonEmptyArray<FieldDefinition<string>>,
+>(
+  definitions: TDefs,
+): ToolGuardFactory<InferPatternMap<TDefs>> => {
 
-  const extractors = definitions.map((definition): Extractor<TKeys> => {
+  const fields = definitions.map(Field) as NonEmptyArray<Field<string>>
 
-    if (typeof definition === 'string')
-      return { name: definition }
-    return definition
-  }) as NonEmptyArray<Extractor<TKeys>>
+  // Internal implementation uses PolicyInput<string> (erased pattern types)
+  // User-facing type safety is provided by ToolGuardFactory<InferPatternMap<TDefs>>
+  const guard = (...inputs: Array<PolicyInput<string>>): ToolGuard => {
 
-  extractorsSchema.parse(extractors.map(extractor => extractor.name))
-
-  return (...inputs) => {
-
-    const scopedPolicies: Array<Policy<TKeys>> = []
-    const globalDenies: Array<Rule<TKeys>> = []
+    let allPolicies: Array<ParsedPolicy<Rule<string>>>
 
     try {
 
-      for (const input of inputs) {
-
-        const policy = Policy(input, extractors)
-
-        if (policy.allow.length === 0)
-          globalDenies.push(...policy.deny)
-        else
-          scopedPolicies.push(policy)
-      }
+      allPolicies = inputs.map(input => Policy(input, fields))
     } catch (error) {
 
       return () => ({
@@ -114,110 +97,61 @@ export const ToolGuardFactory = <const TKeys extends string>(
       })
     }
 
+    const evaluator = PolicyEvaluator<Rule<string>, Record<string, unknown>, { field: Field<string>; pattern: string | symbol }, { field: Field<string>; value: string }>(
+      allPolicies,
+      (rule, toolInput) => rule(toolInput),
+    )
+
     return toolInput => {
 
-      // Phase 1: first-match on scoped policies
-      let allowed = false
-      let lastFailure: { extractor: Extractor<TKeys>; value: string } | undefined
+      const result = evaluator(toolInput)
 
-      for (const policy of scopedPolicies) {
+      switch (result.outcome) {
 
-        let policyAllows = false
+        case 'globalDeny': {
 
-        for (const rule of policy.allow) {
+          const { pattern } = result.match
+          const displayPattern = pattern === acceptAllSymbol
+            ? '(accept-all)'
+            : `'${String(pattern)}'`
 
-          const result = rule(toolInput)
-          if (result.matches) {
-
-            policyAllows = true
-            break
-          }
-
-          lastFailure = result
-        }
-
-        if (!policyAllows)
-          continue
-
-        // Allow matched — check scoped deny
-        for (const rule of policy.deny) {
-
-          const result = rule(toolInput)
-          if (result.matches)
-            return {
-              allowed: false,
-              reason: `${result.extractor.name} blocked by deny pattern: '${result.pattern}'`,
-              suggestion: `Remove '${result.pattern}' from deny.${result.extractor.name}`,
-            }
-        }
-
-        allowed = true
-        break
-      }
-
-      if (!allowed)
-        return {
-          allowed: false,
-          reason: lastFailure
-            ? `${lastFailure.extractor.name} not in allow list`
-            : 'No allow rules defined',
-          suggestion: lastFailure
-            ? buildSuggestion(lastFailure)
-            : 'Add rules to allow',
-        }
-
-      // Phase 2: global deny filter (deny-only policies)
-      for (const rule of globalDenies) {
-
-        const result = rule(toolInput)
-        if (result.matches)
           return {
             allowed: false,
-            reason: `${result.extractor.name} blocked by global deny: '${result.pattern}'`,
-            suggestion: `Remove '${result.pattern}' from deny.${result.extractor.name}`,
+            reason: `${result.match.field.name} blocked by global deny: ${displayPattern}`,
+            suggestion: `Remove ${displayPattern} from deny.${result.match.field.name}`,
+          }
+        }
+
+        case 'scopedDeny': {
+
+          const { pattern } = result.match
+          const displayPattern = pattern === acceptAllSymbol
+            ? '(accept-all)'
+            : `'${String(pattern)}'`
+
+          return {
+            allowed: false,
+            reason: `${result.match.field.name} blocked by deny pattern: ${displayPattern}`,
+            suggestion: `Remove ${displayPattern} from deny.${result.match.field.name}`,
+          }
+        }
+
+        case 'allowed':
+          return { allowed: true }
+
+        case 'noMatch':
+          return {
+            allowed: false,
+            reason: result.lastFailure
+              ? `${result.lastFailure.field.name} not in allow list`
+              : 'No allow rules defined',
+            suggestion: result.lastFailure
+              ? result.lastFailure.field.buildSuggestion(result.lastFailure.value)
+              : 'Add rules to allow',
           }
       }
-
-      return { allowed: true }
     }
   }
-}
 
-
-// ============================================================================
-// Helpers
-// ============================================================================
-
-/**
- * Build a contextual suggestion for allow failures.
- * Path extractors suggest glob patterns, others suggest the exact value.
- */
-const buildSuggestion = (failure: { extractor: Extractor<string>; value: string }): string => {
-
-  const { name, type } = failure.extractor
-
-  if (!type)
-    return `Add '${failure.value}' to allow.${name}`
-
-  if (!failure.value)
-    return `Add '*' to allow.${name}`
-
-  const resolved = resolveProjectPath(failure.value)
-
-  // Internal path: suggest relative pattern
-  if (resolved.internal) {
-
-    const lastSlashIndex = resolved.relativePath.lastIndexOf('/')
-    const globPattern = lastSlashIndex === -1
-      ? '*'
-      : `${resolved.relativePath.slice(0, lastSlashIndex)}/*`
-
-    return `Add '${resolved.relativePath}' or '${globPattern}' to allow.${name}`
-  }
-
-  // External path: suggest external: with resolved absolute
-  const lastSlashIndex = resolved.absolutePath.lastIndexOf('/')
-  const globPattern = `external:${resolved.absolutePath.slice(0, lastSlashIndex)}/*`
-
-  return `Add 'external:${resolved.absolutePath}' or '${globPattern}' to allow.${name}`
+  return guard as ToolGuardFactory<InferPatternMap<TDefs>>
 }

@@ -23,3 +23,16 @@ export const toolGuardSchema = z.union([
  * Maps tool names to their policies.
  */
 export const toolGuardsSchema = z.record(z.string(), toolGuardSchema)
+
+/**
+ * Schema for validating the return value of custom ToolGuard functions.
+ * Ensures `allowed` is a strict boolean (not a truthy string like "yes").
+ */
+export const validationResultSchema = z.union([
+  z.object({ allowed: z.literal(true) }),
+  z.object({
+    allowed: z.literal(false),
+    reason: z.string(),
+    suggestion: z.string(),
+  }),
+])

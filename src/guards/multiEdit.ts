@@ -1,4 +1,7 @@
-import { ToolGuardFactory } from '../guard'
+import { PathExtractableFactory } from '~/extractables/factories/path'
+import { ToolGuardFactory } from '~/guard'
+import { stringPatternSchema } from '~/validation/stringPattern'
+import { PathBuildSuggestion } from './pathBuildSuggestion'
 
 
 
@@ -15,6 +18,8 @@ import { ToolGuardFactory } from '../guard'
 export const MultiEditToolGuard = ToolGuardFactory([
   {
     name: 'file_path',
-    type: 'filePath',
+    validableFactory: PathExtractableFactory({ type: 'file', scope: 'internalUnlessExternalPrefixed' }),
+    buildSuggestion: PathBuildSuggestion('file_path'),
+    patternSchema: stringPatternSchema,
   },
 ])

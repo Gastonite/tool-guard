@@ -1,5 +1,6 @@
-import { existsSync, realpathSync } from 'node:fs'
 import { isAbsolute, relative, resolve } from 'node:path'
+import { projectPath } from '~/config/projectPath'
+import { resolveWithParentSymlinks } from './resolveWithParentSymlinks'
 
 
 
@@ -14,6 +15,14 @@ export type ResolvedProjectPath = (
 /**
  * Resolve a path relative to the project, following symlinks.
  * Returns whether the real path is internal or external.
+ * For non-existent files, resolves symlinks in parent directories
+ * to prevent bypass via symlinked directories.
+ *
+ * **Security note (TOCTOU):** There is an inherent race condition between
+ * resolving symlinks here and Claude Code actually using the path. An attacker
+ * with filesystem access could re-point a symlink after resolution but before
+ * use. This is a fundamental limitation of userspace path validation on Unix —
+ * the threat model assumes the attacker does not have local filesystem access.
  *
  * @example
  * resolveProjectPath('src/app.ts')
@@ -26,14 +35,8 @@ export type ResolvedProjectPath = (
  */
 export const resolveProjectPath = (value: string): ResolvedProjectPath => {
 
-  const projectPath = process.env['CLAUDE_PROJECT_DIR'] ?? process.cwd()
   const resolved = resolve(projectPath, value)
-
-  // Resolve symlinks if file exists to detect links pointing outside
-  const realPath = existsSync(resolved)
-    ? realpathSync(resolved)
-    : resolved
-
+  const realPath = resolveWithParentSymlinks(resolved)
   const rel = relative(projectPath, realPath)
 
   if (!rel.startsWith('..') && !isAbsolute(rel))

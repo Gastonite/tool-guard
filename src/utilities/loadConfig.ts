@@ -1,14 +1,27 @@
 import { existsSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { createJiti as Jiti } from 'jiti'
-import { type ToolGuardsConfig } from '../guard'
-import { toolGuardsSchema } from '../validation/config'
+import { type ToolGuardsConfig } from '~/guard'
+import { toolGuardsSchema } from '~/validation/config'
 
 
 
-const jiti = Jiti(import.meta.url)
+const __dirname = dirname(fileURLToPath(import.meta.url))
+
+const jiti = Jiti(import.meta.url, {
+  alias: {
+    '~': resolve(__dirname, '..'),
+  },
+})
 
 /**
  * Load config from a TypeScript file (uses jiti for dynamic TypeScript import without compilation).
+ *
+ * **Security note:** This executes arbitrary TypeScript/JavaScript code from the config file
+ * via `jiti.import()`. This is by design — same trust model as `eslint.config.js` or
+ * `webpack.config.js`. The config file is developer-authored source code, not untrusted input.
+ *
  * @param filePath - Path to the guard.config.ts file
  * @returns Parsed config or undefined if file doesn't exist
  */

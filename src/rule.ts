@@ -1,92 +1,79 @@
-import { matchesAnyPattern } from './matchers/matchers'
-import { type Extractor } from './types/Extractor'
+import { type Field } from './field'
+import { type MatchResult } from './types/MatchResult'
 import { type NonEmptyArray } from './types/NonEmptyArray'
 import { type RequireAtLeastOne } from './types/RequireAtLeastOne'
-import { type Pattern } from './validation/rule'
+import { type Validator } from './validable'
 
 
 
 /**
  * A rule definition for policy matching.
  * At least one property must be defined.
- * Missing properties default to `['*']` (match any).
+ * Missing properties default to accept-all (no policies).
  * `allow`/`deny` are forbidden to prevent mixing with structured format.
  */
-export type RuleDefinition<TKeys extends string> = (
-  & RequireAtLeastOne<Partial<Record<TKeys, Pattern>>>
+export type RuleDefinition<TPatternMap extends Record<string, unknown> = Record<string, unknown>> = (
+  & RequireAtLeastOne<Partial<TPatternMap>>
   & { allow?: never; deny?: never }
 )
-
-/**
- * Rule input: wildcard or structured definition.
- */
-export type RuleInput<TKeys extends string> = '*' | RuleDefinition<TKeys>
 
 
 /**
  * A rule is a function that matches tool input against patterns.
- * - On success: returns last matched extractor and pattern
- * - On failure: returns first failed extractor and its value
+ * - On success: returns last matched field and pattern
+ * - On failure: returns first failed field and its value
  */
 export type Rule<TKeys extends string> = (
   input: Record<string, unknown>,
-) => ((
-  | { extractor: Extractor<TKeys>; matches: true; pattern: string }
-  | { extractor: Extractor<TKeys>; matches: false; value: string }
-))
+) => MatchResult<
+  { field: Field<TKeys>; pattern: string | symbol },
+  { field: Field<TKeys>; value: string }
+>
 
 
 /**
  * Creates a Rule from input.
  *
- * @param input - RuleInput (wildcard or RuleDefinition)
- * @param extractors - Non-empty array of property names
+ * @param input - RuleDefinition
+ * @param fields - Non-empty array of normalized Fields
  * @returns Rule function that matches tool input
  */
 export const Rule = <TKeys extends string>(
-  input: RuleInput<TKeys>,
-  extractors: NonEmptyArray<Extractor<TKeys>>,
+  input: RuleDefinition<Record<TKeys, unknown>>,
+  fields: NonEmptyArray<Field<TKeys>>,
 ): Rule<TKeys> => {
 
-  const _patterns = Object.fromEntries(
-    extractors.map(
-      input === '*'
-        ? ({ name }) => [name, ['*']]
-        : ({ name }) => [name, (
-          input[name] === undefined
-            ? ['*']
-            : Array.isArray(input[name])
-              ? input[name]
-              : [input[name]]
-        )],
-    ),
-  ) as Record<TKeys, Array<string>>
+  const _validators = Object.fromEntries(
+    fields.map(field => {
+
+      const patternValue = (input as Record<string, unknown>)[field.name]
+
+      const validator: Validator = patternValue !== undefined
+        ? field.validableFactory(patternValue).validate
+        : field.validableFactory().validate
+
+      return [field.name, validator]
+    }),
+  ) as Record<TKeys, Validator>
 
   return toolInput => {
 
-    let lastExtractor: Extractor<TKeys> = extractors[0]
-    let lastPattern = ''
+    let lastField: Field<TKeys> = fields[0]
+    let lastPattern: string | symbol = ''
 
-    for (const extractor of extractors) {
+    for (const field of fields) {
 
-      const value = String(toolInput[extractor.name] ?? '')
+      const value = String(toolInput[field.name] ?? '')
 
-      const pattern = matchesAnyPattern(value, _patterns[extractor.name], extractor.type)
-      if (!pattern)
-        return {
-          matches: false,
-          extractor,
-          value,
-        }
+      const pattern = _validators[field.name](value)
 
-      lastExtractor = extractor
+      if (pattern === undefined)
+        return { matched: false, failure: { field, value } }
+
+      lastField = field
       lastPattern = pattern
     }
 
-    return {
-      matches: true,
-      extractor: lastExtractor,
-      pattern: lastPattern,
-    }
+    return { matched: true, match: { field: lastField, pattern: lastPattern } }
   }
 }

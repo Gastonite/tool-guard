@@ -1,19 +1,54 @@
-import { ToolGuardFactory } from '../guard'
+import { type CommandPattern, CommandValidable, commandBuildSuggestion, commandPatternSchema, splitComposedCommand } from '~/command'
+import { type ToolGuardFactory as ToolGuardFactoryType, ToolGuardFactory } from '~/guard'
+import { type NonEmptyArray } from '~/types/NonEmptyArray'
 
 
+
+type BashPatternMap = { command: NonEmptyArray<CommandPattern> }
 
 /**
  * Policy factory for the Bash tool.
- * Extracts and validates the 'command' property from tool input.
+ * Wraps ToolGuardFactory with command composition splitting (&&, ||, |, ;).
+ * Each part of a composed command is verified individually.
  *
  * @example
  * // Allow git and pnpm commands, block force push
  * Bash: BashToolGuard({
- *   allow: ['git *', 'pnpm *'],
- *   deny: ['git push --force *'],
+ *   allow: [command`git ${greedy}`, command`pnpm ${greedy}`],
+ *   deny: [command`git push --force ${greedy}`],
  * })
- *
- * // Simple allow-only syntax
- * Bash: BashToolGuard(['git status', 'pnpm test'])
  */
-export const BashToolGuard = ToolGuardFactory(['command'])
+export const BashToolGuard: ToolGuardFactoryType<BashPatternMap> = (...configs) => {
+
+  const innerGuard = ToolGuardFactory([
+    {
+      name: 'command' as const,
+      validableFactory: CommandValidable,
+      buildSuggestion: commandBuildSuggestion,
+      patternSchema: commandPatternSchema,
+    },
+  ])(...configs)
+
+  return toolInput => {
+
+    const parts = splitComposedCommand(String(toolInput.command ?? ''))
+
+    // Empty command → deny (no command to validate)
+    if (parts.length === 0)
+      return {
+        allowed: false,
+        reason: 'Empty command',
+        suggestion: 'Provide a non-empty command',
+      }
+
+    for (const part of parts) {
+
+      const result = innerGuard({ command: part })
+
+      if (!result.allowed)
+        return result
+    }
+
+    return { allowed: true }
+  }
+}
