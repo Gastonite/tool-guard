@@ -1,0 +1,9 @@
+pre-commit:
+  parallel: true
+  commands:
+    lint-ts:
+      run: pnpm lint:ts
+    lint-es:
+      glob: "*.{ts,tsx,js,jsx}"
+      run: pnpm lint:es --fix {staged_files}
+      stage_fixed: true
