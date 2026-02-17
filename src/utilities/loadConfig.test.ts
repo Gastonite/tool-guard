@@ -6,7 +6,7 @@ import { loadConfig } from './loadConfig'
 
 
 
-const testDir = join(tmpdir(), 'claude-guard-test')
+const testDir = join(tmpdir(), 'tool-guard-test')
 
 beforeAll(() => {
 

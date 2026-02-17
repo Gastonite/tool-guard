@@ -1,5 +1,5 @@
 {
-  "name": "claude-guard",
+  "name": "tool-guard",
   "version": "1.0.0",
   "description": "Reliable permission system for Claude Code using PreToolUse hooks",
   "keywords": [
@@ -15,12 +15,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/anthropics/claude-guard"
+    "url": "https://github.com/anthropics/tool-guard"
   },
   "bugs": {
-    "url": "https://github.com/anthropics/claude-guard/issues"
+    "url": "https://github.com/anthropics/tool-guard/issues"
   },
-  "homepage": "https://github.com/anthropics/claude-guard#readme",
+  "homepage": "https://github.com/anthropics/tool-guard#readme",
   "type": "module",
   "exports": {
     "./*": {
@@ -29,7 +29,7 @@
     }
   },
   "bin": {
-    "claude-guard": "./dist/cli.js"
+    "tool-guard": "./dist/cli.js"
   },
   "files": [
     "dist",

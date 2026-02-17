@@ -51,7 +51,7 @@ const tsConfig = codeBlock([
   `  ${fn('BashToolGuard')}${p(',')}`,
   `  ${fn('ReadToolGuard')}${p(',')}`,
   `  ${fn('WriteToolGuard')}${p(',')}`,
-  `${p('}')} ${kw('from')} ${str(`'claude-guard'`)}`,
+  `${p('}')} ${kw('from')} ${str(`'tool-guard'`)}`,
   ``,
   `${kw('export default')} ${p('{')}`,
   `  ${prop('Bash')}${p(':')} ${fn('BashToolGuard')}${p('([')}${str(`'git *'`)}${p(',')} ${str(`'pnpm *'`)}${p(']),')}`,
@@ -70,7 +70,7 @@ const jsonConfig = codeBlock([
   `      ${prop('"matcher"')}${p(':')} ${str('".*"')}${p(',')}`,
   `      ${prop('"hooks"')}${p(':')} ${p('[{')}`,
   `        ${prop('"type"')}${p(':')} ${str('"command"')}${p(',')}`,
-  `        ${prop('"command"')}${p(':')} ${str('"pnpm exec claude-guard"')}`,
+  `        ${prop('"command"')}${p(':')} ${str('"pnpm exec tool-guard"')}`,
   `      ${p('}]')}`,
   `    ${p('}]')}`,
   `  ${p('}')}`,
@@ -78,7 +78,7 @@ const jsonConfig = codeBlock([
 ])
 
 console.log(`
-${bold}${blueGray}claude-guard${reset} installed successfully!
+${bold}${blueGray}tool-guard${reset} installed successfully!
 
 ${bold}${blue}Setup${reset}
 
@@ -97,5 +97,5 @@ ${bold}${blue}Features${reset}
   ${green}•${reset} SAFE_* placeholders: ${gray}'git checkout SAFE_BRANCH'${reset}
   ${green}•${reset} Custom validators: ${gray}validate: path => ...${reset}
 
-${gray}Docs: https://github.com/anthropics/claude-guard${reset}
+${gray}Docs: https://github.com/anthropics/tool-guard${reset}
 `)

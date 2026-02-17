@@ -1,6 +1,6 @@
-# claude-guard
+# tool-guard
 
-[![npm version](https://img.shields.io/npm/v/claude-guard.svg)](https://www.npmjs.com/package/claude-guard)
+[![npm version](https://img.shields.io/npm/v/tool-guard.svg)](https://www.npmjs.com/package/tool-guard)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A **reliable** permission system for Claude Code using PreToolUse hooks.
@@ -46,13 +46,13 @@ Hooks are **actually enforced** by Claude Code before any tool execution. This p
 ## Installation
 
 ```bash
-pnpm i -D claude-guard
+pnpm i -D tool-guard
 ```
 
 Or with npm:
 
 ```bash
-npm install -D claude-guard
+npm install -D tool-guard
 ```
 
 ## Quick Start
@@ -70,7 +70,7 @@ import {
   ReadToolGuard,
   WriteToolGuard,
   defineGuard,
-} from 'claude-guard'
+} from 'tool-guard'
 
 export default defineGuard({
   // File operations - wildcards are safe here
@@ -119,7 +119,7 @@ Add to `.claude/settings.local.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "pnpm exec claude-guard"
+            "command": "pnpm exec tool-guard"
           }
         ]
       }
@@ -128,7 +128,7 @@ Add to `.claude/settings.local.json`:
 }
 ```
 
-> **Note:** Use `npx claude-guard` if using npm instead of pnpm.
+> **Note:** Use `npx tool-guard` if using npm instead of pnpm.
 
 ### 3. Done!
 
@@ -154,7 +154,7 @@ import {
   TaskToolGuard,      // extractor: 'subagent_type'
   NotebookEditToolGuard, // extractor: 'notebook_path'
   ToolGuardFactory,   // for custom extractors
-} from 'claude-guard'
+} from 'tool-guard'
 ```
 
 ### Array shorthand
@@ -331,7 +331,7 @@ import {
   WebSearchToolGuard,
   WriteToolGuard,
   defineGuard,
-} from 'claude-guard'
+} from 'tool-guard'
 
 export default defineGuard({
   // File operations (wildcards are safe here)
@@ -392,7 +392,7 @@ import {
   ReadToolGuard,
   WriteToolGuard,
   defineGuard,
-} from 'claude-guard'
+} from 'tool-guard'
 
 export default defineGuard({
   Read: ReadToolGuard({
@@ -427,7 +427,7 @@ import {
   ReadToolGuard,
   WriteToolGuard,
   defineGuard,
-} from 'claude-guard'
+} from 'tool-guard'
 
 export default defineGuard({
   // Only allow files in src/ - path traversal is blocked
@@ -466,7 +466,7 @@ Logs are written to `.claude/logs/guard.log`.
 GUARD_LOG=debug claude
 
 # Debug with stderr output (for manual testing)
-GUARD_LOG=debug GUARD_STDERR=true pnpm exec claude-guard
+GUARD_LOG=debug GUARD_STDERR=true pnpm exec tool-guard
 ```
 
 ## How it works
@@ -479,7 +479,7 @@ GUARD_LOG=debug GUARD_STDERR=true pnpm exec claude-guard
 
 ```
 ┌─────────────┐     stdin      ┌──────────────┐     stdout     ┌─────────────┐
-│ Claude Code │ ──────────────▶│ claude-guard │ ──────────────▶│ Claude Code │
+│ Claude Code │ ──────────────▶│ tool-guard │ ──────────────▶│ Claude Code │
 │             │   HookInput    │              │  HookResponse  │             │
 └─────────────┘                └──────────────┘                └─────────────┘
                                       │
