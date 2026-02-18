@@ -10,13 +10,6 @@ describe('parseStringPolicies', () => {
     expect(parseStringPolicies([])).toBeUndefined()
   })
 
-  it('parses array of strings as allow-only', () => {
-
-    const result = parseStringPolicies([['src/**', 'docs/**']])
-
-    expect(result).toEqual([{ allow: ['src/**', 'docs/**'], deny: [] }])
-  })
-
   it('parses object with allow and deny', () => {
 
     const result = parseStringPolicies([{ allow: ['**'], deny: ['.env'] }])
@@ -38,24 +31,9 @@ describe('parseStringPolicies', () => {
     expect(result).toEqual([{ allow: [], deny: ['.env'] }])
   })
 
-  it('throws on non-string values in arrays', () => {
-
-    expect(() => parseStringPolicies([[123, 'src/**']])).toThrow('Expected string pattern, got number: 123')
-  })
-
-  it('throws on non-string values in allow', () => {
-
-    expect(() => parseStringPolicies([{ allow: [42, 'src/**'] }])).toThrow('Expected string pattern, got number: 42')
-  })
-
-  it('throws on non-string values in deny', () => {
-
-    expect(() => parseStringPolicies([{ deny: [true, '.env'] }])).toThrow('Expected string pattern, got boolean: true')
-  })
-
   it('handles multiple policies (variadic)', () => {
 
-    const result = parseStringPolicies([['src/**'], ['docs/**']])
+    const result = parseStringPolicies([{ allow: ['src/**'] }, { allow: ['docs/**'] }])
 
     expect(result).toEqual([
       { allow: ['src/**'], deny: [] },
@@ -63,15 +41,33 @@ describe('parseStringPolicies', () => {
     ])
   })
 
-  it('skips non-object non-array policies', () => {
-
-    const result = parseStringPolicies(['string' as unknown, ['src/**']])
-
-    expect(result).toEqual([{ allow: ['src/**'], deny: [] }])
-  })
-
   it('returns undefined when object has empty allow and deny', () => {
 
     expect(parseStringPolicies([{ allow: [], deny: [] }])).toBeUndefined()
+  })
+
+  it('throws on array shorthand', () => {
+
+    expect(() => parseStringPolicies([['src/**', 'docs/**']])).toThrow()
+  })
+
+  it('throws on string policy', () => {
+
+    expect(() => parseStringPolicies(['string' as unknown])).toThrow()
+  })
+
+  it('throws on non-string values in allow', () => {
+
+    expect(() => parseStringPolicies([{ allow: [42] }])).toThrow()
+  })
+
+  it('throws on non-string values in deny', () => {
+
+    expect(() => parseStringPolicies([{ deny: [true] }])).toThrow()
+  })
+
+  it('throws on empty object (no allow, no deny)', () => {
+
+    expect(() => parseStringPolicies([{}])).toThrow()
   })
 })

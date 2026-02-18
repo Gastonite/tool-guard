@@ -1,5 +1,5 @@
 import picomatch from 'picomatch'
-import { type Extractable } from '~/extractable'
+import { type ExtractableFactory } from '~/extractable'
 import { acceptAllSymbol, PolicyEvaluator } from '~/policyEvaluator'
 import { type Predicate } from '~/types/Predicate'
 import { parseStringPolicies } from '~/utilities/parseStringPolicies'
@@ -20,7 +20,7 @@ export type PathExtractableOptions = {
  * Built-in ExtractableFactory for paths, configurable via options.
  * Returns an Extractable usable in command templates and ToolGuards.
  */
-export const PathExtractableFactory = (options: PathExtractableOptions): ((...policies: Array<unknown>) => Extractable) => {
+export const PathExtractableFactory = (options: PathExtractableOptions): ExtractableFactory => {
 
   const isSafePath: Predicate<string> = value => {
 
@@ -48,7 +48,7 @@ export const PathExtractableFactory = (options: PathExtractableOptions): ((...po
 
   const baseFactory = CharsetExtractableFactory(PATH_CHARACTERS, isSafePath)
 
-  return (...policies: Array<unknown>): Extractable => {
+  return (...policies) => {
 
     const parsedPolicies = parseStringPolicies(policies)
 

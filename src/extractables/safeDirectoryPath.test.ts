@@ -46,14 +46,14 @@ describe('safeDirectoryPath', () => {
 
     it('matches allow pattern', () => {
 
-      const instance = SafeDirectoryPath(['src/**'])
+      const instance = SafeDirectoryPath({ allow: ['src/**'] })
 
       expect(instance.validate('src/components')).toBe('src/**')
     })
 
     it('rejects when no allow pattern matches', () => {
 
-      const instance = SafeDirectoryPath(['src/**'])
+      const instance = SafeDirectoryPath({ allow: ['src/**'] })
 
       expect(instance.validate('docs')).toBeUndefined()
     })

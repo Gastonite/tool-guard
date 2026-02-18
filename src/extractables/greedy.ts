@@ -1,6 +1,7 @@
 
 import { type Extractable } from '~/extractable'
 import { GlobPolicyEvaluator } from '~/globPolicyEvaluator'
+import { type SimplePolicyDefinition } from '~/policy'
 import { acceptAllSymbol } from '~/policyEvaluator'
 import { type Predicate } from '~/types/Predicate'
 import { parseStringPolicies } from '~/utilities/parseStringPolicies'
@@ -149,7 +150,7 @@ export const defaultGreedyExtractable: GreedyExtractable = {
  * via GlobPolicyEvaluator, which uses string matching (`matchGlobPattern`): `*` matches any
  * characters including `/`, and `*`/`**` are equivalent.
  */
-export const Greedy = (...policies: Array<unknown>): GreedyExtractable => {
+export const Greedy = (...policies: Array<SimplePolicyDefinition<string>>): GreedyExtractable => {
 
   const parsedPolicies = parseStringPolicies(policies)
 

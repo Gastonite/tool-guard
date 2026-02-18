@@ -151,14 +151,14 @@ describe('Greedy', () => {
 
   it('allowed: matches allow pattern', () => {
 
-    const instance = Greedy(['hello*'])
+    const instance = Greedy({ allow: ['hello*'] })
 
     expect(instance.validate('hello world')).toBe('hello*')
   })
 
   it('noMatch: rejects when no allow pattern matches', () => {
 
-    const instance = Greedy(['hello*'])
+    const instance = Greedy({ allow: ['hello*'] })
 
     expect(instance.validate('goodbye')).toBeUndefined()
   })

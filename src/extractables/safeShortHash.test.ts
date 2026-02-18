@@ -57,14 +57,14 @@ describe('SafeShortHash', () => {
 
   it('allowed: matches allow pattern', () => {
 
-    const instance = SafeShortHash(['abcdef*'])
+    const instance = SafeShortHash({ allow: ['abcdef*'] })
 
     expect(instance.validate('abcdef1')).toBe('abcdef*')
   })
 
   it('noMatch: rejects when no allow pattern matches', () => {
 
-    const instance = SafeShortHash(['abcdef*'])
+    const instance = SafeShortHash({ allow: ['abcdef*'] })
 
     expect(instance.validate('1234567')).toBeUndefined()
   })

@@ -71,7 +71,7 @@ describe('SafePackage', () => {
 
   it('allowed: matches allow pattern', () => {
 
-    const instance = SafePackage(['lodash', '@types/*'])
+    const instance = SafePackage({ allow: ['lodash', '@types/*'] })
 
     expect(instance.validate('lodash')).toBe('lodash')
     expect(instance.validate('@types/node')).toBe('@types/*')
@@ -79,7 +79,7 @@ describe('SafePackage', () => {
 
   it('noMatch: rejects when no allow pattern matches', () => {
 
-    const instance = SafePackage(['lodash', '@types/*'])
+    const instance = SafePackage({ allow: ['lodash', '@types/*'] })
 
     expect(instance.validate('express')).toBeUndefined()
   })

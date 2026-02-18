@@ -56,14 +56,14 @@ describe('safeFilePath', () => {
 
     it('matches allow pattern', () => {
 
-      const instance = SafeFilePath(['src/**'])
+      const instance = SafeFilePath({ allow: ['src/**'] })
 
       expect(instance.validate('src/app.ts')).toBe('src/**')
     })
 
     it('rejects when no allow pattern matches', () => {
 
-      const instance = SafeFilePath(['src/**'])
+      const instance = SafeFilePath({ allow: ['src/**'] })
 
       expect(instance.validate('docs/guide.md')).toBeUndefined()
     })
@@ -78,7 +78,7 @@ describe('safeFilePath', () => {
 
     it('supports external: prefix', () => {
 
-      const instance = SafeFilePath(['src/**', 'external:/etc/hosts'])
+      const instance = SafeFilePath({ allow: ['src/**', 'external:/etc/hosts'] })
 
       expect(instance.validate('/etc/hosts')).toBe('/etc/hosts')
       expect(instance.validate('/etc/shadow')).toBeUndefined()

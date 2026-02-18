@@ -64,7 +64,7 @@ describe('CharsetExtractableFactory', () => {
 
     it('matches allow pattern', () => {
 
-      const extractable = factory(['a*'])
+      const extractable = factory({ allow: ['a*'] })
 
       expect(extractable.validate('abc')).toBe('a*')
     })
@@ -73,14 +73,14 @@ describe('CharsetExtractableFactory', () => {
 
       const rejectAll = () => false
       const rejectFactory = CharsetExtractableFactory(charset, rejectAll)
-      const extractable = rejectFactory(['*'])
+      const extractable = rejectFactory({ allow: ['*'] })
 
       expect(extractable.validate('abc')).toBeUndefined()
     })
 
     it('rejects when no allow pattern matches', () => {
 
-      const extractable = factory(['x*'])
+      const extractable = factory({ allow: ['x*'] })
 
       expect(extractable.validate('abc')).toBeUndefined()
     })

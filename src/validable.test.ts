@@ -15,14 +15,14 @@ describe('DefaultValidable', () => {
 
   it('matches value against allow pattern', () => {
 
-    const validable = DefaultValidable(['src/**'])
+    const validable = DefaultValidable({ allow: ['src/**'] })
 
     expect(validable.validate('src/app.ts')).toBe('src/**')
   })
 
   it('rejects when no allow pattern matches', () => {
 
-    const validable = DefaultValidable(['src/**'])
+    const validable = DefaultValidable({ allow: ['src/**'] })
 
     expect(validable.validate('docs/readme.md')).toBeUndefined()
   })
@@ -37,7 +37,7 @@ describe('DefaultValidable', () => {
 
   it('handles multiple policies (variadic)', () => {
 
-    const validable = DefaultValidable(['src/**'], ['docs/**'])
+    const validable = DefaultValidable({ allow: ['src/**'] }, { allow: ['docs/**'] })
 
     expect(validable.validate('src/app.ts')).toBe('src/**')
     expect(validable.validate('docs/readme.md')).toBe('docs/**')

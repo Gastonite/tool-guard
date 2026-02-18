@@ -68,7 +68,7 @@ describe('SafeBranch', () => {
 
   it('allowed: matches allow pattern', () => {
 
-    const instance = SafeBranch(['main', 'feature/*'])
+    const instance = SafeBranch({ allow: ['main', 'feature/*'] })
 
     expect(instance.validate('main')).toBe('main')
     expect(instance.validate('feature/foo')).toBe('feature/*')
@@ -76,7 +76,7 @@ describe('SafeBranch', () => {
 
   it('noMatch: rejects when no allow pattern matches', () => {
 
-    const instance = SafeBranch(['main', 'feature/*'])
+    const instance = SafeBranch({ allow: ['main', 'feature/*'] })
 
     expect(instance.validate('develop')).toBeUndefined()
   })
