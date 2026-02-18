@@ -50,7 +50,7 @@ describe('Field', () => {
 
     it('validableFactory with policies matches via glob', () => {
 
-      const validable = field.validableFactory(['src/*'])
+      const validable = field.validableFactory({ allow: ['src/*'] })
 
       expect(validable.validate('src/foo.ts')).toBe('src/*')
       expect(validable.validate('docs/bar.md')).toBeUndefined()

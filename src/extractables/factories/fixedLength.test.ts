@@ -57,14 +57,14 @@ describe('FixedLengthExtractableFactory', () => {
 
     it('matches allow pattern', () => {
 
-      const extractable = factory(['abcd*'])
+      const extractable = factory({ allow: ['abcd*'] })
 
       expect(extractable.validate('abcd1234')).toBe('abcd*')
     })
 
     it('rejects when no allow pattern matches', () => {
 
-      const extractable = factory(['xxxx*'])
+      const extractable = factory({ allow: ['xxxx*'] })
 
       expect(extractable.validate('abcd1234')).toBeUndefined()
     })

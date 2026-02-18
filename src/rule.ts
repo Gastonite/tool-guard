@@ -49,7 +49,7 @@ export const Rule = <TKeys extends string>(
       const patternValue = (input as Record<string, unknown>)[field.name]
 
       const validator: Validator = patternValue !== undefined
-        ? field.validableFactory(patternValue).validate
+        ? field.validableFactory({ allow: patternValue }).validate
         : field.validableFactory().validate
 
       return [field.name, validator]

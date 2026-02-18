@@ -54,14 +54,14 @@ describe('SafeString', () => {
 
   it('allowed: matches allow pattern', () => {
 
-    const instance = SafeString(['hello*'])
+    const instance = SafeString({ allow: ['hello*'] })
 
     expect(instance.validate('"hello world"')).toBe('hello*')
   })
 
   it('noMatch: rejects when no allow pattern matches', () => {
 
-    const instance = SafeString(['hello*'])
+    const instance = SafeString({ allow: ['hello*'] })
 
     expect(instance.validate('"goodbye"')).toBeUndefined()
   })

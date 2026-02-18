@@ -69,14 +69,14 @@ describe('SafeUrl', () => {
 
   it('allowed: matches allow pattern', () => {
 
-    const instance = SafeUrl(['https://example.com*'])
+    const instance = SafeUrl({ allow: ['https://example.com*'] })
 
     expect(instance.validate('https://example.com/path')).toBe('https://example.com*')
   })
 
   it('noMatch: rejects when no allow pattern matches', () => {
 
-    const instance = SafeUrl(['https://example.com*'])
+    const instance = SafeUrl({ allow: ['https://example.com*'] })
 
     expect(instance.validate('https://evil.com')).toBeUndefined()
   })

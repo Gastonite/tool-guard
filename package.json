@@ -1,6 +1,6 @@
 {
   "name": "tool-guard",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Reliable permission system for Claude Code using PreToolUse hooks",
   "keywords": [
     "claude",
@@ -9,18 +9,21 @@
     "permissions",
     "hooks",
     "security",
-    "guard"
+    "guard",
+    "tool-use",
+    "pretooluse",
+    "cli"
   ],
-  "author": "",
+  "author": "Clément Pasquier <melc.pasquier@gmail.com>",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/anthropics/tool-guard"
+    "url": "https://github.com/Gastonite/tool-guard"
   },
   "bugs": {
-    "url": "https://github.com/anthropics/tool-guard/issues"
+    "url": "https://github.com/Gastonite/tool-guard/issues"
   },
-  "homepage": "https://github.com/anthropics/tool-guard#readme",
+  "homepage": "https://github.com/Gastonite/tool-guard#readme",
   "type": "module",
   "exports": {
     "./*": {
@@ -33,13 +36,16 @@
   },
   "files": [
     "dist",
-    "bin"
+    "bin",
+    "README.md",
+    "LICENSE"
   ],
   "engines": {
     "node": ">=18.0.0"
   },
   "scripts": {
-    "build": "pnpm build:ts && pnpm build:es && tsc-alias -p tsconfig.build.json",
+    "clean": "rm -rf dist",
+    "build": "pnpm clean && pnpm build:ts && pnpm build:es && tsc-alias -p tsconfig.build.json",
     "build:ts": "tsc -p tsconfig.build.json",
     "build:es": "tsx scripts/build.ts",
     "dev": "tsc --watch",
@@ -77,5 +83,6 @@
     "jiti": "^2.6.1",
     "picomatch": "^4.0.3",
     "zod": "^4.3.6"
-  }
+  },
+  "packageManager": "pnpm@10.24.0"
 }

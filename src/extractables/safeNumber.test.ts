@@ -59,14 +59,14 @@ describe('SafeNumber', () => {
 
   it('allowed: matches allow pattern', () => {
 
-    const instance = SafeNumber(['42'])
+    const instance = SafeNumber({ allow: ['42'] })
 
     expect(instance.validate('42')).toBe('42')
   })
 
   it('noMatch: rejects when no allow pattern matches', () => {
 
-    const instance = SafeNumber(['42'])
+    const instance = SafeNumber({ allow: ['42'] })
 
     expect(instance.validate('99')).toBeUndefined()
   })
