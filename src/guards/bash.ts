@@ -1,5 +1,5 @@
 import { type CommandPattern, CommandValidable, commandBuildSuggestion, commandPatternSchema, splitComposedCommand } from '~/command'
-import { type ToolGuardFactory as ToolGuardFactoryType, ToolGuardFactory } from '~/guard'
+import { ToolGuardFactory } from '~/guard'
 import { type NonEmptyArray } from '~/types/NonEmptyArray'
 
 
@@ -18,7 +18,7 @@ type BashPatternMap = { command: NonEmptyArray<CommandPattern> }
  *   deny: [command`git push --force ${greedy}`],
  * })
  */
-export const BashToolGuard: ToolGuardFactoryType<BashPatternMap> = (...configs) => {
+export const BashToolGuard: ToolGuardFactory<BashPatternMap> = (...configs) => {
 
   const innerGuard = ToolGuardFactory([
     {

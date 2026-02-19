@@ -25,16 +25,9 @@ export type StructuredPolicyDefinition<TPatternMap extends Record<string, unknow
 }
 
 /**
- * Union of all policy definition forms (object with allow and/or deny).
- */
-export type PolicyDefinition<TKeys extends string> = (
-  | SimplePolicyDefinition
-  | StructuredPolicyDefinition<Record<TKeys, unknown>>
-)
-
-/**
- * Policy input: either a SimplePolicyDefinition (allow/deny with patterns)
- * or a StructuredPolicyDefinition (allow/deny with rule definitions).
+ * Union of all policy definition forms: either a SimplePolicyDefinition
+ * (allow/deny with patterns) or a StructuredPolicyDefinition (allow/deny
+ * with rule definitions).
  *
  * - `{ allow: ['src/*'], deny: ['*.env'] }` → SimplePolicyDefinition
  * - `{ allow: [{ path: ['src/*'] }], deny: [{ path: ['*.env'] }] }` → StructuredPolicyDefinition
@@ -44,11 +37,11 @@ export type PolicyDefinition<TKeys extends string> = (
  * CommandPattern for Bash). Runtime validation via field.isPattern handles
  * field-dependent patterns.
  */
-export type PolicyInput<TKeys extends string> = (
+
+export type PolicyDefinition<TKeys extends string> = (
   | SimplePolicyDefinition
   | StructuredPolicyDefinition<Record<TKeys, unknown>>
 )
-
 
 /**
  * Normalized policy with allow/deny rules.
@@ -62,17 +55,17 @@ export type Policy<TKeys extends string> = {
  * Creates a normalized Policy from a SimplePolicyDefinition or
  * StructuredPolicyDefinition input.
  *
- * @param input - PolicyInput (simple or structured)
+ * @param definition - PolicyDefinition (simple or structured)
  * @param fields - Non-empty array of normalized Fields
  * @returns Normalized Policy with allow/deny arrays
  */
 export const Policy = <TKeys extends string>(
-  input: PolicyInput<TKeys>,
+  definition: PolicyDefinition<TKeys>,
   fields: NonEmptyArray<Field<TKeys>>,
 ): Policy<TKeys> => {
 
   // SimplePolicyDefinition: { allow?: Pattern, deny?: Pattern }
-  if (isSimplePolicyDefinition(input, fields[0].patternsSchema)) {
+  if (isSimplePolicyDefinition(definition, fields[0].patternsSchema)) {
 
     z.object({
       allow: fields[0].patternsSchema.optional(),
@@ -80,9 +73,9 @@ export const Policy = <TKeys extends string>(
     }).refine(
       policy => policy.allow !== undefined || policy.deny !== undefined,
       'Simple policy must have at least allow or deny',
-    ).parse(input)
+    ).parse(definition)
 
-    const simplePolicyDefinition = input as SimplePolicyDefinition
+    const simplePolicyDefinition = definition as SimplePolicyDefinition
     const defaultFieldName = fields[0].name
 
     return {
@@ -96,13 +89,13 @@ export const Policy = <TKeys extends string>(
   }
 
   // Explicit format: StructuredPolicyDefinition
-  policyDefinitionSchema.parse(input)
+  policyDefinitionSchema.parse(definition)
 
   // StructuredPolicyDefinition: { allow?: Rules, deny?: Rules }
-  if (isStructuredPolicyDefinition(input)) {
+  if (isStructuredPolicyDefinition(definition)) {
 
     // Cast needed: TS generic inference loses TKeys through isPolicyDefinition narrowing
-    const structuredPolicyDefinition = input as StructuredPolicyDefinition<Record<TKeys, unknown>>
+    const structuredPolicyDefinition = definition as StructuredPolicyDefinition<Record<TKeys, unknown>>
 
     const normalizeRules = (
       rules: NonEmptyArray<RuleDefinition<Record<TKeys, unknown>>> | undefined,
@@ -120,7 +113,7 @@ export const Policy = <TKeys extends string>(
     }
   }
 
-  // Should never reach here — all valid PolicyInput forms are handled above
+  // Should never reach here — all valid PolicyDefinition forms are handled above
   throw new Error('Invalid policy input')
 }
 
@@ -134,7 +127,6 @@ export const Policy = <TKeys extends string>(
  * Discriminant: RuleDefinition forbids allow/deny keys, so their presence identifies a policy.
  */
 const isPolicyDefinition = <TKeys extends string>(value: unknown): value is PolicyDefinition<TKeys> => (
-
   typeof value === 'object'
   // eslint-disable-next-line no-restricted-syntax -- null check required: typeof null === 'object'
   && value !== null
@@ -157,7 +149,6 @@ const isSimplePolicyDefinition = (
   input: unknown,
   patternSchema: z.ZodType,
 ): input is SimplePolicyDefinition => (
-
   isPolicyDefinition(input)
   && (input.allow === undefined || isPattern(input.allow, patternSchema) || isEmptyArray(input.allow))
   && (input.deny === undefined || isPattern(input.deny, patternSchema) || isEmptyArray(input.deny))
@@ -168,7 +159,6 @@ const isSimplePolicyDefinition = (
  * Object with at least one key, without allow/deny.
  */
 const isRuleDefinitionShape = (value: unknown): boolean => (
-
   typeof value === 'object'
   // eslint-disable-next-line no-restricted-syntax -- null check required: typeof null === 'object'
   && value !== null
@@ -182,7 +172,6 @@ const isRuleDefinitionShape = (value: unknown): boolean => (
  * Check if a value is a valid rule input: RuleDefinition or Array<RuleDefinition>.
  */
 const isRuleInput = (value: unknown): boolean => (
-
   isRuleDefinitionShape(value)
   || (Array.isArray(value) && value.length > 0 && value.every(isRuleDefinitionShape))
 )
@@ -192,10 +181,9 @@ const isRuleInput = (value: unknown): boolean => (
  * Positive structural check: allow/deny values must be rule inputs, not patterns.
  */
 const isStructuredPolicyDefinition = <TKeys extends string>(
-  input: PolicyInput<TKeys>,
-): input is StructuredPolicyDefinition<Record<TKeys, unknown>> => (
-
-  isPolicyDefinition(input)
-  && (input.allow === undefined || isRuleInput(input.allow))
-  && (input.deny === undefined || isRuleInput(input.deny))
+  definition: PolicyDefinition<TKeys>,
+): definition is StructuredPolicyDefinition<Record<TKeys, unknown>> => (
+  isPolicyDefinition(definition)
+  && (definition.allow === undefined || isRuleInput(definition.allow))
+  && (definition.deny === undefined || isRuleInput(definition.deny))
 )
