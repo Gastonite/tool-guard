@@ -4,7 +4,7 @@ import { stringPolicyDefinitionSchema } from '~/validation/policy'
 
 
 /**
- * Parses PolicyInput into separate Array<ParsedPolicy<string>>.
+ * Parses PolicyDefinition into separate Array<ParsedPolicy<string>>.
  * One element per argument. Validates each policy with Zod (stringPolicyDefinitionSchema).
  */
 export const parseStringPolicies = (policies: Array<unknown>): Array<ParsedPolicy<string>> | undefined => {

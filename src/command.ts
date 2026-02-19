@@ -340,7 +340,7 @@ export const commandPatternSchema = z.custom<CommandPattern>(isCommandPattern)
 export const commandBuildSuggestion = (value: string): string => `Add a command pattern for '${value}' to allow.command`
 
 /**
- * Parses PolicyInput into separate Array<ParsedPolicy<CommandPattern>>.
+ * Parses PolicyDefinition into separate Array<ParsedPolicy<CommandPattern>>.
  * One element per argument. Handles 2 forms: Array<CommandPattern>, { allow?, deny? }.
  */
 const parseCommandPolicies = (policies: Array<unknown>): Array<ParsedPolicy<CommandPattern>> | undefined => {

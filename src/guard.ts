@@ -1,6 +1,6 @@
 import { type z } from 'zod'
 import { Field, type FieldDefinition, type InferPatternMap } from './field'
-import { type PolicyInput, type StructuredPolicyDefinition, Policy } from './policy'
+import { type PolicyDefinition, type StructuredPolicyDefinition, Policy } from './policy'
 import { acceptAllSymbol, type ParsedPolicy, PolicyEvaluator } from './policyEvaluator'
 import { type Rule } from './rule'
 import { type NonEmptyArray } from './types/NonEmptyArray'
@@ -75,15 +75,15 @@ export const ToolGuardFactory = <
 
   const fields = definitions.map(Field) as NonEmptyArray<Field<string>>
 
-  // Internal implementation uses PolicyInput<string> (erased pattern types)
+  // Internal implementation uses PolicyDefinition<string> (erased pattern types)
   // User-facing type safety is provided by ToolGuardFactory<InferPatternMap<TDefs>>
-  const guard = (...inputs: Array<PolicyInput<string>>): ToolGuard => {
+  const guard = (...definitions: Array<PolicyDefinition<string>>): ToolGuard => {
 
     let allPolicies: Array<ParsedPolicy<Rule<string>>>
 
     try {
 
-      allPolicies = inputs.map(input => Policy(input, fields))
+      allPolicies = definitions.map(input => Policy(input, fields))
     } catch (error) {
 
       return () => ({
