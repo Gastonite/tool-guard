@@ -1,8 +1,7 @@
 import { z } from 'zod'
 import { type NonEmptyArray } from './types/NonEmptyArray'
-import { DefaultValidable, type ValidableFactory } from './validable'
+import { GlobValidable, type ValidableFactory } from './validable'
 import { fieldDefinitionSchema } from './validation/field'
-import { stringPatternSchema } from './validation/stringPattern'
 
 
 
@@ -13,12 +12,13 @@ export type StringFieldDefinition<TKeys extends string> = {
   name: TKeys
 }
 
-/** FieldDefinition with factory — all or nothing, all props required. */
-export type CustomFieldDefinition<TKeys extends string, TPattern = unknown> = {
+/** FieldDefinition with factory. patternSchema and valueSchema default to z.string(). */
+export type CustomFieldDefinition<TKeys extends string, TPattern = unknown, TValue = string> = {
   name: TKeys
-  validableFactory: ValidableFactory<TPattern>
+  validableFactory: ValidableFactory<TPattern, TValue>
   buildSuggestion: (value: string) => string
-  patternSchema: z.ZodType<TPattern>
+  patternSchema?: z.ZodType<TPattern>
+  valueSchema?: z.ZodType<TValue>
 }
 
 /** FieldDefinition: string shorthand, StringFieldDefinition or CustomFieldDefinition. */
@@ -45,12 +45,13 @@ export type InferPatternMap<TDefs extends ReadonlyArray<FieldDefinition<string>>
 
 // ─── Field ──────────────────────────────────────────────────────────────────
 
-/** Normalized Field: 4 props always present. */
+/** Normalized Field: 5 props always present. */
 export type Field<TKeys extends string> = {
   name: TKeys
   buildSuggestion: (value: string) => string
   validableFactory: ValidableFactory
-  patternsSchema: z.ZodType
+  patternSchema: z.ZodType
+  valueSchema: z.ZodType
 }
 
 /** Normalizes a FieldDefinition into a Field (4 props always present). */
@@ -68,13 +69,15 @@ export const Field = <TKeys extends string>(
       name: definition.name,
       buildSuggestion: definition.buildSuggestion,
       validableFactory: definition.validableFactory,
-      patternsSchema: z.array(definition.patternSchema).nonempty(),
+      patternSchema: definition.patternSchema ?? z.string(),
+      valueSchema: definition.valueSchema ?? z.string(),
     }
 
   return {
     name: definition.name,
     buildSuggestion: value => `Add '${value}' to allow.${definition.name}`,
-    validableFactory: DefaultValidable,
-    patternsSchema: z.array(stringPatternSchema).nonempty(),
+    validableFactory: GlobValidable as ValidableFactory,
+    patternSchema: z.string(),
+    valueSchema: z.coerce.string(),
   }
 }

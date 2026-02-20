@@ -1,6 +1,5 @@
 import { PathExtractableFactory } from '~/extractables/factories/path'
 import { ToolGuardFactory } from '~/guard'
-import { stringPatternSchema } from '~/validation/stringPattern'
 import { PathBuildSuggestion } from './pathBuildSuggestion'
 
 
@@ -20,6 +19,5 @@ export const NotebookEditToolGuard = ToolGuardFactory([
     name: 'notebook_path',
     validableFactory: PathExtractableFactory({ type: 'file', scope: 'internalUnlessExternalPrefixed' }),
     buildSuggestion: PathBuildSuggestion('notebook_path'),
-    patternSchema: stringPatternSchema,
   },
 ])

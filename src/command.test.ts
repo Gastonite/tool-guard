@@ -205,7 +205,7 @@ describe('matchCommandPattern (via CommandValidable)', () => {
 
   describe('fixed command', () => {
 
-    const validable = CommandValidable([command`git status`])
+    const validable = CommandValidable({ allow: [command`git status`] })
 
     it('matches exactly', () => {
 
@@ -225,7 +225,7 @@ describe('matchCommandPattern (via CommandValidable)', () => {
 
   describe('single extractor slot', () => {
 
-    const validable = CommandValidable([command`git checkout ${safeBranch}`])
+    const validable = CommandValidable({ allow: [command`git checkout ${safeBranch}`] })
 
     it('matches with valid extractor value', () => {
 
@@ -241,7 +241,7 @@ describe('matchCommandPattern (via CommandValidable)', () => {
 
   describe('two extractors', () => {
 
-    const validable = CommandValidable([command`git log -n ${safeNumber} ${safeBranch}`])
+    const validable = CommandValidable({ allow: [command`git log -n ${safeNumber} ${safeBranch}`] })
 
     it('matches when both extractors succeed', () => {
 
@@ -257,7 +257,7 @@ describe('matchCommandPattern (via CommandValidable)', () => {
   it('matches with spread extractor (multiple tokens separated by space)', () => {
 
     const pattern = command`git add ${spread(safeFilePath)}`
-    const validable = CommandValidable([pattern])
+    const validable = CommandValidable({ allow: [pattern] })
 
     expect(validable.validate('git add src/foo.ts')).toBeDefined()
     expect(validable.validate('git add src/foo.ts src/bar.ts')).toBeDefined()
@@ -266,7 +266,7 @@ describe('matchCommandPattern (via CommandValidable)', () => {
   it('matches with greedy extractor', () => {
 
     const pattern = command`echo ${greedy}`
-    const validable = CommandValidable([pattern])
+    const validable = CommandValidable({ allow: [pattern] })
 
     expect(validable.validate('echo hello world')).toBeDefined()
   })
@@ -274,7 +274,7 @@ describe('matchCommandPattern (via CommandValidable)', () => {
   it('greedy backtracks to match trailing segment', () => {
 
     const pattern = command`echo ${greedy} done`
-    const validable = CommandValidable([pattern])
+    const validable = CommandValidable({ allow: [pattern] })
 
     expect(validable.validate('echo hello world done')).toBeDefined()
   })
@@ -282,7 +282,7 @@ describe('matchCommandPattern (via CommandValidable)', () => {
   it('rejects when no extractors match the input', () => {
 
     const pattern = command`git checkout ${safeNumber}`
-    const validable = CommandValidable([pattern])
+    const validable = CommandValidable({ allow: [pattern] })
 
     // safeNumber expects digits, 'main' is not digits
     expect(validable.validate('git checkout main')).toBeUndefined()
@@ -301,7 +301,7 @@ describe('CommandValidable', () => {
 
   describe('with allow patterns', () => {
 
-    const validable = CommandValidable([command`git status`])
+    const validable = CommandValidable({ allow: [command`git status`] })
 
     it('accepts matching command', () => {
 
@@ -328,7 +328,7 @@ describe('CommandValidable', () => {
 
     const statusPattern = command`git status`
     const checkoutPattern = command`git checkout ${safeBranch}`
-    const validable = CommandValidable([statusPattern], [checkoutPattern])
+    const validable = CommandValidable({ allow: [statusPattern] }, { allow: [checkoutPattern] })
 
     expect(validable.validate('git status')).toBeDefined()
     expect(validable.validate('git checkout main')).toBeDefined()

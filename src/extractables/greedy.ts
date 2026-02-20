@@ -1,10 +1,9 @@
 
 import { type Extractable } from '~/extractable'
-import { GlobPolicyEvaluator } from '~/globPolicyEvaluator'
-import { type SimplePolicyDefinition } from '~/policy'
-import { acceptAllSymbol } from '~/policyEvaluator'
+import { GlobSimplePolicy } from '~/globPolicy'
+import { type PolicyDefinition } from '~/policy'
+import { acceptAllSymbol, MergedPolicy } from '~/policyEvaluator'
 import { type Predicate } from '~/types/Predicate'
-import { parseStringPolicies } from '~/utilities/parseStringPolicies'
 import { validateWithPolicies } from './factories/utilities/validateWithPolicies'
 import { EXCLUDED_DOUBLE_QUOTE_CHARACTERS, isSafeQuotedCharacter } from './utilities/quoteCharacters'
 
@@ -150,18 +149,18 @@ export const defaultGreedyExtractable: GreedyExtractable = {
  * via GlobPolicyEvaluator, which uses string matching (`matchGlobPattern`): `*` matches any
  * characters including `/`, and `*`/`**` are equivalent.
  */
-export const Greedy = (...policies: Array<SimplePolicyDefinition<string>>): GreedyExtractable => {
+export const Greedy = (...policies: Array<PolicyDefinition<string>>): GreedyExtractable => {
 
-  const parsedPolicies = parseStringPolicies(policies)
-
-  if (parsedPolicies === undefined)
+  if (policies.length === 0)
     return defaultGreedyExtractable
 
-  const evaluator = GlobPolicyEvaluator(parsedPolicies)
+  const merged = MergedPolicy(
+    ...policies.map(GlobSimplePolicy),
+  )
 
   return {
     extract: extractGreedy,
-    validate: value => validateWithPolicies(value, isFullyExtractable, evaluator),
+    validate: value => validateWithPolicies(value, isFullyExtractable, merged),
     kind: 'GreedyExtractable' as const,
   }
 }

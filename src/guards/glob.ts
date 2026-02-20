@@ -1,6 +1,5 @@
 import { PathExtractableFactory } from '~/extractables/factories/path'
 import { ToolGuardFactory } from '~/guard'
-import { stringPatternSchema } from '~/validation/stringPattern'
 import { PathBuildSuggestion } from './pathBuildSuggestion'
 
 
@@ -23,7 +22,6 @@ export const GlobToolGuard = ToolGuardFactory([
     name: 'path',
     validableFactory: PathExtractableFactory({ type: 'directory', scope: 'internalUnlessExternalPrefixed' }),
     buildSuggestion: PathBuildSuggestion('path'),
-    patternSchema: stringPatternSchema,
   },
   'pattern',
 ])

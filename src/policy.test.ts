@@ -1,148 +1,177 @@
 import { describe, expect, it } from 'vitest'
 import { Field } from './field'
-import { Policy } from './policy'
+import { type PolicyInput, StructuredPolicyFactory } from './policy'
 
 
 
 const pathField = Field('path')
 const patternField = Field('pattern')
+const GuardPolicy = StructuredPolicyFactory([pathField])
 
 
 
-describe('Policy', () => {
+describe('StructuredPolicyFactory', () => {
 
-  describe('SimplePolicyDefinition', () => {
+  describe('PolicyDefinition (simple)', () => {
 
-    it('creates allow rules from simple pattern array', () => {
+    it('returns allowed when allow pattern matches', () => {
 
-      const policy = Policy({ allow: ['src/*'] }, [pathField])
+      const evaluate = GuardPolicy({ allow: ['src/*'] })
 
-      expect(policy.allow).toHaveLength(1)
-      expect(policy.deny).toHaveLength(0)
+      expect(evaluate({ path: 'src/app.ts' }).outcome).toBe('allowed')
     })
 
-    it('creates deny rules from simple pattern array', () => {
+    it('returns noMatch when allow pattern does not match', () => {
 
-      const policy = Policy({ deny: ['*.env'] }, [pathField])
+      const evaluate = GuardPolicy({ allow: ['src/*'] })
 
-      expect(policy.allow).toHaveLength(0)
-      expect(policy.deny).toHaveLength(1)
+      expect(evaluate({ path: 'docs/readme.md' }).outcome).toBe('noMatch')
     })
 
-    it('creates both allow and deny rules', () => {
+    it('returns globalDeny when deny-only pattern matches', () => {
 
-      const policy = Policy({ allow: ['src/*'], deny: ['*.env'] }, [pathField])
+      const evaluate = GuardPolicy({ deny: ['*env'] })
 
-      expect(policy.allow).toHaveLength(1)
-      expect(policy.deny).toHaveLength(1)
+      expect(evaluate({ path: '.env' }).outcome).toBe('globalDeny')
     })
 
-    it('allow rule matches correct values', () => {
+    it('returns noMatch when deny-only pattern does not match', () => {
 
-      const policy = Policy({ allow: ['src/*'] }, [pathField])
-      const rule = policy.allow[0]!
+      const evaluate = GuardPolicy({ deny: ['*env'] })
 
-      expect(rule({ path: 'src/app.ts' }).matched).toBe(true)
-      expect(rule({ path: 'docs/readme.md' }).matched).toBe(false)
+      expect(evaluate({ path: 'src/app.ts' }).outcome).toBe('noMatch')
     })
 
-    it('deny rule matches correct values', () => {
+    it('returns scopedDeny when allow and deny both match', () => {
 
-      const policy = Policy({ deny: ['*env'] }, [pathField])
-      const rule = policy.deny[0]!
+      const evaluate = GuardPolicy({ allow: ['*'], deny: ['*env'] })
 
-      expect(rule({ path: '.env' }).matched).toBe(true)
-      expect(rule({ path: 'src/app.ts' }).matched).toBe(false)
+      expect(evaluate({ path: '.env' }).outcome).toBe('scopedDeny')
+    })
+
+    it('returns allowed when allow matches and deny does not', () => {
+
+      const evaluate = GuardPolicy({ allow: ['*'], deny: ['*env'] })
+
+      expect(evaluate({ path: 'src/app.ts' }).outcome).toBe('allowed')
     })
   })
 
   describe('StructuredPolicyDefinition', () => {
 
-    it('creates rules from structured allow', () => {
+    it('returns allowed when structured allow pattern matches', () => {
 
-      const policy = Policy(
-        { allow: [{ path: ['src/*'] }] },
-        [pathField],
-      )
+      const evaluate = GuardPolicy({ allow: [{ path: ['src/*'] }] })
 
-      expect(policy.allow).toHaveLength(1)
-      expect(policy.deny).toHaveLength(0)
+      expect(evaluate({ path: 'src/app.ts' }).outcome).toBe('allowed')
     })
 
-    it('creates rules from structured deny', () => {
+    it('returns globalDeny when structured deny pattern matches', () => {
 
-      const policy = Policy(
-        { deny: [{ path: ['*.env'] }] },
-        [pathField],
-      )
+      const evaluate = GuardPolicy({ deny: [{ path: ['*env'] }] })
 
-      expect(policy.allow).toHaveLength(0)
-      expect(policy.deny).toHaveLength(1)
+      expect(evaluate({ path: '.env' }).outcome).toBe('globalDeny')
     })
 
-    it('creates multiple rules from array', () => {
+    it('returns allowed when any of multiple allow rules matches', () => {
 
-      const policy = Policy(
-        { allow: [{ path: ['src/*'] }, { path: ['docs/*'] }] },
-        [pathField],
-      )
+      const evaluate = GuardPolicy({ allow: [{ path: ['src/*'] }, { path: ['docs/*'] }] })
 
-      expect(policy.allow).toHaveLength(2)
+      expect(evaluate({ path: 'docs/readme.md' }).outcome).toBe('allowed')
     })
 
-    it('structured rule matches correct values', () => {
+    it('returns allowed when all fields match in multi-field AND logic', () => {
 
-      const policy = Policy(
-        { allow: [{ path: ['src/*'], pattern: ['TODO'] }] },
-        [pathField, patternField],
-      )
-      const rule = policy.allow[0]!
+      const GuardPolicy2 = StructuredPolicyFactory([pathField, patternField])
+      const evaluate = GuardPolicy2({ allow: [{ path: ['src/*'], pattern: ['TODO'] }] })
 
-      expect(rule({ path: 'src/app.ts', pattern: 'TODO' }).matched).toBe(true)
-      expect(rule({ path: 'src/app.ts', pattern: 'FIXME' }).matched).toBe(false)
+      expect(evaluate({ path: 'src/app.ts', pattern: 'TODO' }).outcome).toBe('allowed')
+    })
+
+    it('returns noMatch when one field does not match in multi-field AND logic', () => {
+
+      const GuardPolicy2 = StructuredPolicyFactory([pathField, patternField])
+      const evaluate = GuardPolicy2({ allow: [{ path: ['src/*'], pattern: ['TODO'] }] })
+
+      expect(evaluate({ path: 'src/app.ts', pattern: 'FIXME' }).outcome).toBe('noMatch')
+    })
+
+    it('accepts any value for a field without pattern constraint (accept-all)', () => {
+
+      const GuardPolicy2 = StructuredPolicyFactory([pathField, patternField])
+      const evaluate = GuardPolicy2({ allow: [{ path: ['src/*'] }] })
+
+      expect(evaluate({ path: 'src/app.ts', pattern: 'anything' }).outcome).toBe('allowed')
     })
   })
 
   describe('validation', () => {
 
-    it('throws on empty object (no allow or deny)', () => {
+    it('throws on empty object', () => {
 
-      expect(() => Policy({} as Record<string, unknown>, [pathField])).toThrow()
+      expect(() => GuardPolicy({} as unknown as PolicyInput<'path'>)).toThrow()
     })
 
-    it('throws on invalid simple policy (empty allow array)', () => {
+    it('throws on empty allow array', () => {
 
-      expect(() => Policy({ allow: [] }, [pathField])).toThrow()
+      expect(() => GuardPolicy({ allow: [] } as unknown as PolicyInput<'path'>)).toThrow()
     })
 
-    it('throws on invalid simple policy (empty deny array)', () => {
+    it('throws on empty deny array', () => {
 
-      expect(() => Policy({ deny: [] }, [pathField])).toThrow()
+      expect(() => GuardPolicy({ deny: [] } as unknown as PolicyInput<'path'>)).toThrow()
     })
 
-    it('throws on empty rule object in allow (no fields)', () => {
+    it('throws on empty rule object in allow', () => {
 
-      expect(() => Policy({ allow: [{}] }, [pathField])).toThrow()
+      expect(() => GuardPolicy({ allow: [{}] } as unknown as PolicyInput<'path'>)).toThrow()
     })
 
-    it('throws on empty rule object in deny (no fields)', () => {
+    it('throws on empty rule object in deny', () => {
 
-      expect(() => Policy({ deny: [{}] }, [pathField])).toThrow()
+      expect(() => GuardPolicy({ deny: [{}] } as unknown as PolicyInput<'path'>)).toThrow()
     })
 
     it('throws on wildcard string', () => {
 
-      expect(() => Policy('*' as unknown as Record<string, unknown>, [pathField])).toThrow()
+      expect(() => GuardPolicy('*' as unknown as PolicyInput<'path'>)).toThrow()
     })
 
     it('throws on single rule object (missing allow/deny wrapper)', () => {
 
-      expect(() => Policy({ path: 'src/*' } as unknown as Record<string, unknown>, [pathField])).toThrow()
+      expect(() => GuardPolicy({ path: 'src/*' } as unknown as PolicyInput<'path'>)).toThrow()
     })
 
     it('throws on array of rules directly', () => {
 
-      expect(() => Policy([{ path: 'src/*' }] as unknown as Record<string, unknown>, [pathField])).toThrow()
+      expect(() => GuardPolicy([{ path: 'src/*' }] as unknown as PolicyInput<'path'>)).toThrow()
+    })
+  })
+
+  describe('simple and structured produce same result', () => {
+
+    it('returns same outcome for matching allow input', () => {
+
+      const simple = GuardPolicy({ allow: ['src/*'], deny: ['*env'] })
+      const structured = GuardPolicy({ allow: [{ path: ['src/*'] }], deny: [{ path: ['*env'] }] })
+
+      expect(simple({ path: 'src/app.ts' }).outcome).toBe(structured({ path: 'src/app.ts' }).outcome)
+    })
+
+    it('returns same outcome for matching deny input', () => {
+
+      const simple = GuardPolicy({ allow: ['src/*'], deny: ['*env'] })
+      const structured = GuardPolicy({ allow: [{ path: ['src/*'] }], deny: [{ path: ['*env'] }] })
+
+      expect(simple({ path: '.env' }).outcome).toBe(structured({ path: '.env' }).outcome)
+    })
+
+    it('returns same outcome for non-matching input', () => {
+
+      const simple = GuardPolicy({ allow: ['src/*'], deny: ['*env'] })
+      const structured = GuardPolicy({ allow: [{ path: ['src/*'] }], deny: [{ path: ['*env'] }] })
+
+      expect(simple({ path: 'docs/readme.md' }).outcome).toBe(structured({ path: 'docs/readme.md' }).outcome)
     })
   })
 })

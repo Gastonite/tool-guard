@@ -1,35 +1,35 @@
 import { describe, expect, it } from 'vitest'
 import { acceptAllSymbol } from './policyEvaluator'
-import { DefaultValidable } from './validable'
+import { GlobValidable } from './validable'
 
 
 
-describe('DefaultValidable', () => {
+describe('GlobValidable', () => {
 
   it('returns acceptAll when no policies provided', () => {
 
-    const validable = DefaultValidable()
+    const validable = GlobValidable()
 
     expect(validable.validate('anything')).toBe(acceptAllSymbol)
   })
 
   it('matches value against allow pattern', () => {
 
-    const validable = DefaultValidable({ allow: ['src/**'] })
+    const validable = GlobValidable({ allow: ['src/**'] })
 
     expect(validable.validate('src/app.ts')).toBe('src/**')
   })
 
   it('rejects when no allow pattern matches', () => {
 
-    const validable = DefaultValidable({ allow: ['src/**'] })
+    const validable = GlobValidable({ allow: ['src/**'] })
 
     expect(validable.validate('docs/readme.md')).toBeUndefined()
   })
 
   it('deny overrides allow', () => {
 
-    const validable = DefaultValidable({ allow: ['*'], deny: ['secret'] })
+    const validable = GlobValidable({ allow: ['*'], deny: ['secret'] })
 
     expect(validable.validate('hello')).toBe('*')
     expect(validable.validate('secret')).toBeUndefined()
@@ -37,7 +37,7 @@ describe('DefaultValidable', () => {
 
   it('handles multiple policies (variadic)', () => {
 
-    const validable = DefaultValidable({ allow: ['src/**'] }, { allow: ['docs/**'] })
+    const validable = GlobValidable({ allow: ['src/**'] }, { allow: ['docs/**'] })
 
     expect(validable.validate('src/app.ts')).toBe('src/**')
     expect(validable.validate('docs/readme.md')).toBe('docs/**')

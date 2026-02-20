@@ -157,19 +157,19 @@ export default defineGuard({
 
 ## Reusable policy objects
 
-Guards and extractable factories both accept **variadic** policy arguments. Instead of spreading pattern arrays into `allow`/`deny`, you can define complete `SimplePolicyDefinition` objects and pass them directly:
+Guards and extractable factories both accept **variadic** policy arguments. Instead of spreading pattern arrays into `allow`/`deny`, you can define complete `PolicyDefinition` objects and pass them directly:
 
 ```typescript
 // policies.ts
-import { type SimplePolicyDefinition } from 'tool-guard/policy'
+import { type PolicyDefinition } from 'tool-guard/policy'
 
-export const ALLOW_ALL: SimplePolicyDefinition<string> = { allow: ['*'] }
+export const ALLOW_ALL: PolicyDefinition<string> = { allow: ['*'] }
 
-export const DENY_ENV: SimplePolicyDefinition<string> = {
+export const DENY_ENV: PolicyDefinition<string> = {
   deny: ['.env', '*.env', '.env.*'],
 }
 
-export const DENY_SECRETS: SimplePolicyDefinition<string> = {
+export const DENY_SECRETS: PolicyDefinition<string> = {
   deny: ['**/*.pem', '**/*.key', '**/*.p12', '**/credentials*'],
 }
 

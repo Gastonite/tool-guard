@@ -57,13 +57,12 @@ const buildLibrary = async () => {
     'src/command.ts',
     'src/extractable.ts',
     'src/field.ts',
-    'src/globPolicyEvaluator.ts',
+    'src/globPolicy.ts',
     'src/guard.ts',
     'src/io.ts',
     'src/logger.ts',
     'src/policy.ts',
     'src/policyEvaluator.ts',
-    'src/rule.ts',
     'src/validable.ts',
   ]
 
