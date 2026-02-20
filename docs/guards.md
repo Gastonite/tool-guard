@@ -1,6 +1,12 @@
 # Guard factories
 
-Each guard factory pre-configures the fields to validate for a specific Claude Code tool.
+One factory per tool, pre-configured with the right fields. You just provide the policies.
+
+```typescript
+ReadToolGuard({ allow: ['src/**'], deny: ['**/.env'] })
+WriteToolGuard({ allow: ['src/**/*.ts'] })
+BashToolGuard({ allow: [command`git status`, command`pnpm test`] })
+```
 
 ---
 
@@ -170,7 +176,11 @@ ReadMcpResourceToolGuard({
 
 ## Custom guards
 
+For tools not covered by built-in guards, or when you need custom validation logic.
+
 ### With ToolGuardFactory
+
+Declare which fields to validate — you get the same glob matching and policy system as built-in guards:
 
 ```typescript
 import { ToolGuardFactory } from 'tool-guard/guard'
@@ -183,6 +193,8 @@ ToolGuardFactory(['action'])({
 
 ### With a function
 
+Full control — validate the raw tool input yourself:
+
 ```typescript
 input => {
   if (String(input.action) === 'dangerous')
@@ -191,4 +203,4 @@ input => {
 }
 ```
 
-Custom guard return values are validated with Zod — `allowed` must be a strict boolean (`true`/`false`), not a truthy value like `"yes"`. Invalid returns are treated as deny (fail-safe).
+Return values are validated with Zod — `allowed` must be a strict boolean (`true`/`false`), not a truthy value. Invalid returns are treated as deny (fail-safe).

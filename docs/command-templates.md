@@ -1,22 +1,18 @@
 # Command templates
 
-The `command` tagged template literal creates type-safe, injection-proof patterns for Bash command validation.
+Glob patterns are dangerous for Bash — `git *` matches `git status && rm -rf /`. The `command` tagged template solves this by:
 
----
-
-## Why not glob patterns for Bash?
-
-Glob patterns are **dangerous** for Bash. Claude can inject through shell composition operators:
-
-```typescript
-// DANGEROUS: "git status && rm -rf /" matches "git *"
-BashToolGuard({ allow: ['git *'] })
-```
-
-The `command` template solves this by:
 1. **Splitting** composed commands on `&&`, `||`, `|`, `;`
 2. **Validating** each part independently against the allowed patterns
 3. **Rejecting** dangerous characters at extraction level
+
+```typescript
+// DANGEROUS — Claude can inject through shell operators
+BashToolGuard({ allow: ['git *'] })
+
+// SAFE — each part of "git status && rm -rf /" is validated independently
+BashToolGuard({ allow: [command`git status`, command`git commit -m ${safeString}`] })
+```
 
 ---
 
