@@ -3,7 +3,7 @@ import { BaseEslintPreset } from './eslint.base.config'
 
 
 export default BaseEslintPreset({
-  ignores: ['apps', 'packages', 'node_modules', 'dist', 'scripts'],
+  ignores: ['apps', 'packages', 'node_modules', 'dist'],
   tsconfigRootDir: import.meta.dirname,
   unusedExportsReporting: {
     ignoreUnusedTypeExports: true,
