@@ -1,8 +1,7 @@
 import { type ExtractableFactory, type Extractable } from '~/extractable'
-import { GlobPolicyEvaluator } from '~/globPolicyEvaluator'
-import { acceptAllSymbol } from '~/policyEvaluator'
+import { GlobSimplePolicy } from '~/globPolicy'
+import { acceptAllSymbol, MergedPolicy } from '~/policyEvaluator'
 import { type Predicate } from '~/types/Predicate'
-import { parseStringPolicies } from '~/utilities/parseStringPolicies'
 import { validateWithPolicies } from './utilities/validateWithPolicies'
 
 
@@ -10,7 +9,7 @@ import { validateWithPolicies } from './utilities/validateWithPolicies'
 /**
  * Factory-of-factory from a charset.
  * extract: scans chars from the charset (pure syntax).
- * validate: security (predicate) + policies (allow/deny via PolicyEvaluator).
+ * validate: security (predicate) + policies (allow/deny via MergedPolicy).
  */
 export const CharsetExtractableFactory = (
   charset: Set<string>,
@@ -40,15 +39,16 @@ export const CharsetExtractableFactory = (
 
   return (...policies) => {
 
-    const parsedPolicies = parseStringPolicies(policies)
-    if (parsedPolicies === undefined)
+    if (policies.length === 0)
       return defaultExtractable
 
-    const evaluator = GlobPolicyEvaluator(parsedPolicies)
+    const merged = MergedPolicy(
+      ...policies.map(GlobSimplePolicy),
+    )
 
     return {
       extract,
-      validate: value => validateWithPolicies(value, predicate, evaluator),
+      validate: value => validateWithPolicies(value, predicate, merged),
     }
   }
 }

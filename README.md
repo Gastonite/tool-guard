@@ -118,9 +118,9 @@ export default defineGuard({
 ## How it works
 
 ```
-┌─────────────┐     stdin (JSON)     ┌──────────────┐     stdout (JSON)    ┌─────────────┐
+┌─────────────┐     stdin (JSON)     ┌──────────────┐     stdout (JSON)   ┌─────────────┐
 │ Claude Code │ ───────────────────▶ │  tool-guard  │ ──────────────────▶ │ Claude Code │
-│             │  { toolName, input } │              │  { allow | deny }   │  (enforced)  │
+│             │  { toolName, input } │              │  { allow | deny }   │  (enforced) │
 └─────────────┘                      └──────┬───────┘                     └─────────────┘
                                             │
                                             ▼
@@ -402,7 +402,7 @@ To fix: Add a matching command pattern to the 'allow' list in .claude/guard.conf
 
 ```bash
 pnpm install
-pnpm test       # 550+ tests
+pnpm test       # 640+ tests
 pnpm lint       # tsc + eslint
 pnpm build
 ```

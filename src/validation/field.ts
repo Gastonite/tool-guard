@@ -14,6 +14,7 @@ export const customFieldDefinitionSchema = stringFieldDefinitionSchema.extend({
   validableFactory: z.custom<ValidableFactory>(isFunction, 'validableFactory must be a function'),
   buildSuggestion: z.custom<(value: string) => string>(isFunction, 'buildSuggestion must be a function'),
   patternSchema: z.custom<z.ZodType>(value => value instanceof z.ZodType, 'patternSchema must be a ZodType'),
+  valueSchema: z.custom<z.ZodType>(value => value instanceof z.ZodType, 'valueSchema must be a ZodType').optional(),
 })
 
 export const fieldDefinitionSchema = z.union([

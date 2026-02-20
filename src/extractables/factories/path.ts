@@ -1,9 +1,9 @@
 import picomatch from 'picomatch'
 import { type ExtractableFactory } from '~/extractable'
-import { acceptAllSymbol, PolicyEvaluator } from '~/policyEvaluator'
+import { acceptAllSymbol, MergedPolicy, PolicyFactory } from '~/policyEvaluator'
 import { type Predicate } from '~/types/Predicate'
-import { parseStringPolicies } from '~/utilities/parseStringPolicies'
 import { resolveProjectPath } from '~/utilities/resolveProjectPath'
+import { stringPolicyDefinitionSchema } from '~/validation/policy'
 import { CharsetExtractableFactory } from './charset'
 
 
@@ -46,47 +46,50 @@ export const PathExtractableFactory = (options: PathExtractableOptions): Extract
     return true
   }
 
-  const baseFactory = CharsetExtractableFactory(PATH_CHARACTERS, isSafePath)
+  const PathExtractable = CharsetExtractableFactory(PATH_CHARACTERS, isSafePath)
 
   return (...policies) => {
 
-    const parsedPolicies = parseStringPolicies(policies)
-
-    if (parsedPolicies !== undefined && options.scope !== 'internalUnlessExternalPrefixed') {
-
-      const externalPrefixed = parsedPolicies
-        .flatMap(policy => [...policy.allow, ...policy.deny])
-        .find(pattern => pattern.startsWith(EXTERNAL_PREFIX))
-
-      if (externalPrefixed)
-        throw new Error(`Pattern '${externalPrefixed}' uses 'external:' prefix but scope is '${String(options.scope)}'. The 'external:' prefix is only valid with scope 'internalUnlessExternalPrefixed'.`)
-    }
-
-    const base = baseFactory(...policies)
-
-    if (parsedPolicies === undefined) {
+    if (policies.length === 0) {
 
       return {
-        extract: base.extract,
+        extract: PathExtractable(...policies).extract,
         validate: value => {
 
           if (!isSafePath(value))
-            return undefined
+            return
 
           if (options.scope === 'internalUnlessExternalPrefixed' && !resolveProjectPath(value).internal)
-            return undefined
+            return
 
           return acceptAllSymbol
         },
       }
     }
 
+    // Validate and normalize policies
+    const parsedPolicies = policies.map(policy => stringPolicyDefinitionSchema.parse(policy))
+
+    // Validate external: prefix usage
+    if (options.scope !== 'internalUnlessExternalPrefixed') {
+
+      const externalPrefixed = parsedPolicies
+        .flatMap(policy => [...(policy.allow ?? []), ...(policy.deny ?? [])])
+        .find(pattern => pattern.startsWith(EXTERNAL_PREFIX))
+
+      if (externalPrefixed)
+        throw new Error(`Pattern '${externalPrefixed}' uses 'external:' prefix but scope is '${String(options.scope)}'. The 'external:' prefix is only valid with scope 'internalUnlessExternalPrefixed'.`)
+    }
+
+    const pathExtractable = PathExtractable(...policies)
+
     type ResolvedPathInfo = {
       normalizedValue: string
       internal: boolean
     }
 
-    const testMatch = (pattern: string, info: ResolvedPathInfo): { matched: true; match: string } | { matched: false; failure: undefined } => {
+    // Closure captures options.scope — cannot be hoisted
+    const _PathMatcher = (pattern: string) => (info: ResolvedPathInfo): { matched: true; match: string } | { matched: false; failure: undefined } => {
 
       if (options.scope === 'internalUnlessExternalPrefixed') {
 
@@ -110,14 +113,16 @@ export const PathExtractableFactory = (options: PathExtractableOptions): Extract
         : { matched: false, failure: undefined }
     }
 
-    const evaluator = PolicyEvaluator(parsedPolicies, testMatch)
+    const merged = MergedPolicy(
+      ...parsedPolicies.map(PolicyFactory(_PathMatcher)),
+    )
 
     return {
-      extract: base.extract,
+      extract: pathExtractable.extract,
       validate: value => {
 
         if (!isSafePath(value))
-          return undefined
+          return
 
         const resolved = resolveProjectPath(value)
         const info: ResolvedPathInfo = {
@@ -128,7 +133,7 @@ export const PathExtractableFactory = (options: PathExtractableOptions): Extract
           internal: resolved.internal,
         }
 
-        const result = evaluator(info)
+        const result = merged(info)
 
         return result.outcome === 'allowed'
           ? result.match

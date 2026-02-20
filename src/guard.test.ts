@@ -1,10 +1,10 @@
 import { dirname } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { z } from 'zod'
 import { PathExtractableFactory } from '~/extractables/factories/path'
 import { projectPathMock } from '../testing/setup'
 import { defineGuard, ToolGuardFactory } from './guard'
 import { PathBuildSuggestion } from './guards/pathBuildSuggestion'
-import { stringPatternSchema } from './validation/stringPattern'
 
 
 
@@ -237,7 +237,7 @@ describe('ToolGuardFactory', () => {
           name: 'file_path',
           validableFactory: PathExtractableFactory({ scope: 'internal' }),
           buildSuggestion: PathBuildSuggestion('file_path'),
-          patternSchema: stringPatternSchema,
+          patternSchema: z.string(),
         },
       ])
 

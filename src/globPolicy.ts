@@ -1,4 +1,5 @@
-import { type EvaluateResult, type ParsedPolicy, PolicyEvaluator } from './policyEvaluator'
+import { SimplePolicyFactory } from './policyEvaluator'
+import { type MatchResult } from './types/MatchResult'
 
 
 
@@ -98,12 +99,12 @@ export const matchGlobPattern = (pattern: string, value: string): boolean => {
   return true
 }
 
-export const GlobPolicyEvaluator = (
-  parsedPolicies: Array<ParsedPolicy<string>>,
-): (value: string) => EvaluateResult<string, undefined> => (
-  PolicyEvaluator(parsedPolicies, (pattern, value) => (
-    matchGlobPattern(pattern, value)
-      ? { matched: true, match: pattern }
-      : { matched: false, failure: undefined }
-  ))
+/** Curried glob matcher: `(pattern) => (value) => MatchResult`. */
+export const GlobMatcher = (pattern: string) => (value: string): MatchResult<string, undefined> => (
+  matchGlobPattern(pattern, value)
+    ? { matched: true, match: pattern }
+    : { matched: false, failure: undefined }
 )
+
+/** Factory: validates input via Zod schema, then creates a glob policy function. */
+export const GlobSimplePolicy = SimplePolicyFactory(GlobMatcher)

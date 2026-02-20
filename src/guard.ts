@@ -1,8 +1,7 @@
 import { type z } from 'zod'
 import { Field, type FieldDefinition, type InferPatternMap } from './field'
-import { type PolicyDefinition, type StructuredPolicyDefinition, Policy } from './policy'
-import { acceptAllSymbol, type ParsedPolicy, PolicyEvaluator } from './policyEvaluator'
-import { type Rule } from './rule'
+import { type PolicyInput, StructuredPolicyFactory, type StructuredPolicyDefinition } from './policy'
+import { acceptAllSymbol, MergedPolicy, type PolicyResult } from './policyEvaluator'
 import { type NonEmptyArray } from './types/NonEmptyArray'
 import { type validationResultSchema } from './validation/config'
 
@@ -68,22 +67,30 @@ export type ToolGuardFactory<TPatternMap extends Record<string, unknown>> = (
  * GrepToolGuard({ allow: ['src/**'] })  // → applies to 'path', 'pattern' defaults to '*'
  */
 export const ToolGuardFactory = <
-  const TDefs extends NonEmptyArray<FieldDefinition<string>>,
+  const TDefinitions extends NonEmptyArray<FieldDefinition<string>>,
 >(
-  definitions: TDefs,
-): ToolGuardFactory<InferPatternMap<TDefs>> => {
+  definitions: TDefinitions,
+): ToolGuardFactory<InferPatternMap<TDefinitions>> => {
 
   const fields = definitions.map(Field) as NonEmptyArray<Field<string>>
+  const GuardPolicy = StructuredPolicyFactory(fields)
 
-  // Internal implementation uses PolicyDefinition<string> (erased pattern types)
-  // User-facing type safety is provided by ToolGuardFactory<InferPatternMap<TDefs>>
-  const guard = (...definitions: Array<PolicyDefinition<string>>): ToolGuard => {
+  // Internally, `guard` accepts the generic PolicyDefinition<string> (loose types).
+  // Externally, users see ToolGuardFactory<InferPatternMap<TDefinitions>> (precise types
+  // inferred from field definitions — e.g. NonEmptyArray<CommandPattern> for Bash).
+  // The cast on the return bridges this gap: TypeScript can't prove compatibility
+  // between the loose internal type and the precise external type, but Zod validates
+  // the actual pattern types at runtime via field.patternSchema.
+  const guard = (...configs: Array<PolicyInput<string>>): ToolGuard => {
 
-    let allPolicies: Array<ParsedPolicy<Rule<string>>>
+    let merged: (toolInput: Record<string, unknown>) => PolicyResult<
+      { field: Field<string>; pattern: string | symbol },
+      { field: Field<string>; value: unknown }
+    >
 
     try {
 
-      allPolicies = definitions.map(input => Policy(input, fields))
+      merged = MergedPolicy(...configs.map(GuardPolicy))
     } catch (error) {
 
       return () => ({
@@ -97,14 +104,9 @@ export const ToolGuardFactory = <
       })
     }
 
-    const evaluator = PolicyEvaluator<Rule<string>, Record<string, unknown>, { field: Field<string>; pattern: string | symbol }, { field: Field<string>; value: string }>(
-      allPolicies,
-      (rule, toolInput) => rule(toolInput),
-    )
-
     return toolInput => {
 
-      const result = evaluator(toolInput)
+      const result = merged(toolInput)
 
       switch (result.outcome) {
 
@@ -146,12 +148,12 @@ export const ToolGuardFactory = <
               ? `${result.lastFailure.field.name} not in allow list`
               : 'No allow rules defined',
             suggestion: result.lastFailure
-              ? result.lastFailure.field.buildSuggestion(result.lastFailure.value)
+              ? result.lastFailure.field.buildSuggestion(String(result.lastFailure.value))
               : 'Add rules to allow',
           }
       }
     }
   }
 
-  return guard as ToolGuardFactory<InferPatternMap<TDefs>>
+  return guard as ToolGuardFactory<InferPatternMap<TDefinitions>>
 }

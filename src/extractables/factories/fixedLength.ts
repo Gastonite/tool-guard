@@ -1,8 +1,7 @@
 import { type ExtractableFactory, type Extractable } from '~/extractable'
-import { GlobPolicyEvaluator } from '~/globPolicyEvaluator'
-import { acceptAllSymbol } from '~/policyEvaluator'
+import { GlobSimplePolicy } from '~/globPolicy'
+import { acceptAllSymbol, MergedPolicy } from '~/policyEvaluator'
 import { type Predicate } from '~/types/Predicate'
-import { parseStringPolicies } from '~/utilities/parseStringPolicies'
 import { validateWithPolicies } from './utilities/validateWithPolicies'
 
 
@@ -10,7 +9,7 @@ import { validateWithPolicies } from './utilities/validateWithPolicies'
 /**
  * Fixed-length factory-of-factory (e.g. commit hash 40 chars).
  * extract: consumes exactly N chars from the charset.
- * validate: security (predicate) + policies via PolicyEvaluator.
+ * validate: security (predicate) + policies via MergedPolicy.
  */
 export const FixedLengthExtractableFactory = (
   charset: Set<string>,
@@ -41,15 +40,16 @@ export const FixedLengthExtractableFactory = (
 
   return (...policies) => {
 
-    const parsedPolicies = parseStringPolicies(policies)
-    if (parsedPolicies === undefined)
+    if (policies.length === 0)
       return defaultExtractable
 
-    const evaluator = GlobPolicyEvaluator(parsedPolicies)
+    const merged = MergedPolicy(
+      ...policies.map(GlobSimplePolicy),
+    )
 
     return {
       extract,
-      validate: value => validateWithPolicies(value, predicate, evaluator),
+      validate: value => validateWithPolicies(value, predicate, merged),
     }
   }
 }

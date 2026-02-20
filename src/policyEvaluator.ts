@@ -1,19 +1,12 @@
 import { type MatchResult } from './types/MatchResult'
 import { type Validable } from './validable'
+import { stringPolicyDefinitionSchema } from './validation/policy'
 
 
 
-// ─── ParsedPolicy ────────────────────────────────────────────────────────────
+// ─── PolicyResult ───────────────────────────────────────────────────────────
 
-export type ParsedPolicy<TPattern> = {
-  allow: Array<TPattern>
-  deny: Array<TPattern>
-}
-
-
-// ─── EvaluateResult ──────────────────────────────────────────────────────────
-
-export type EvaluateResult<TMatch, TFailure> = (
+export type PolicyResult<TMatch, TFailure> = (
   | { outcome: 'globalDeny'; match: TMatch }
   | { outcome: 'scopedDeny'; match: TMatch }
   | { outcome: 'allowed'; match: TMatch }
@@ -30,78 +23,132 @@ export const acceptAllSymbol = Symbol('acceptAll')
 export const acceptAll: Validable = { validate: () => acceptAllSymbol }
 
 
-// ─── PolicyEvaluator ─────────────────────────────────────────────────────────
+// ─── PolicyFactory ──────────────────────────────────────────────────────────
 
 /**
- * Pure higher-order function for the deny/allow algorithm.
+ * Factory-of-factory: takes a curried Matcher and returns a factory
+ * that creates per-policy evaluation functions.
  *
- * Construction: receives policies + testMatch callback.
- * Separates globalDenies/scopedPolicies once.
- * Returns an evaluate(value) → EvaluateResult function.
+ * Matcher: `(pattern) => (value) => MatchResult`
+ * Factory: `({ allow?, deny? }) => (value) => PolicyResult`
  *
- * Algorithm:
- * 1. GlobalDenies FIRST (fast rejection)
- * 2. First-match on scopedPolicies:
- *    - allow match → check scoped deny → match → scopedDeny (HARD REJECT)
- *    - allow match → no deny → allowed
- *    - no allow match → continue (next policy)
- * 3. No match → noMatch (with optional lastFailure)
+ * Per-policy logic:
+ * - Deny-only (no allow) → globalDeny on first match, noMatch otherwise
+ * - Allow+deny → try allow first, then scoped deny, then allowed
+ * - No match → noMatch with optional lastFailure
  */
-export const PolicyEvaluator = <TPattern, TValue, TMatch, TFailure>(
-  policies: Array<ParsedPolicy<TPattern>>,
-  testMatch: (pattern: TPattern, value: TValue) => MatchResult<TMatch, TFailure>,
-): (value: TValue) => EvaluateResult<TMatch, TFailure> => {
+export const PolicyFactory = <TPattern, TValue, TMatch, TFailure>(
+  Matcher: (pattern: TPattern) => (value: TValue) => MatchResult<TMatch, TFailure>,
+) => (
+  policy: { allow?: Array<TPattern>; deny?: Array<TPattern> },
+): (value: TValue) => PolicyResult<TMatch, TFailure> => {
 
-  const globalDenies = policies.filter(policy => policy.allow.length === 0)
-  const scopedPolicies = policies.filter(policy => policy.allow.length > 0)
+  const allowMatchers = (policy.allow ?? []).map(Matcher)
+  const denyMatchers = (policy.deny ?? []).map(Matcher)
 
   return value => {
 
-    // 1. GlobalDenies FIRST (fast rejection)
-    for (const policy of globalDenies)
-      for (const pattern of policy.deny) {
+    // Deny-only → globalDeny
+    if (allowMatchers.length === 0) {
 
-        const result = testMatch(pattern, value)
+      for (const matcher of denyMatchers) {
+
+        const result = matcher(value)
 
         if (result.matched)
           return { outcome: 'globalDeny', match: result.match }
       }
 
-    // 2. First-match on scopedPolicies
-    let lastFailure: TFailure | undefined
-
-    for (const policy of scopedPolicies) {
-
-      let allowMatch: TMatch | undefined
-
-      for (const pattern of policy.allow) {
-
-        const result = testMatch(pattern, value)
-
-        if (result.matched) {
-
-          allowMatch = result.match
-          break
-        }
-
-        lastFailure = result.failure
-      }
-
-      if (allowMatch === undefined)
-        continue
-
-      // Allow matched — check scoped deny
-      for (const pattern of policy.deny) {
-
-        const result = testMatch(pattern, value)
-
-        if (result.matched)
-          return { outcome: 'scopedDeny', match: result.match }
-      }
-
-      return { outcome: 'allowed', match: allowMatch }
+      return { outcome: 'noMatch' }
     }
 
-    return { outcome: 'noMatch', lastFailure }
+    // Try allow
+    let lastFailure: TFailure | undefined
+    let allowMatch: TMatch | undefined
+
+    for (const matcher of allowMatchers) {
+
+      const result = matcher(value)
+
+      if (result.matched) {
+
+        allowMatch = result.match
+        break
+      }
+
+      lastFailure = result.failure
+    }
+
+    if (allowMatch === undefined)
+      return { outcome: 'noMatch', lastFailure }
+
+    // Scoped deny
+    for (const matcher of denyMatchers) {
+
+      const result = matcher(value)
+
+      if (result.matched)
+        return { outcome: 'scopedDeny', match: result.match }
+    }
+
+    return { outcome: 'allowed', match: allowMatch }
   }
+}
+
+
+// ─── SimplePolicyFactory ────────────────────────────────────────────────────
+
+/**
+ * Factory-of-factory for extractable-style policies (always string patterns).
+ * Validates input via stringPolicyDefinitionSchema, then creates matchers.
+ *
+ * Returns a factory: `(input) → policyFn`.
+ */
+export const SimplePolicyFactory = <TValue, TMatch, TFailure>(
+  Matcher: (pattern: string) => (value: TValue) => MatchResult<TMatch, TFailure>,
+) => {
+
+  const factory = PolicyFactory(Matcher)
+
+  return (input: unknown): (value: TValue) => PolicyResult<TMatch, TFailure> => {
+
+    return factory(
+      stringPolicyDefinitionSchema.parse(input),
+    )
+  }
+}
+
+
+// ─── MergedPolicy ───────────────────────────────────────────────────────────
+
+/**
+ * Aggregates multiple per-policy functions into a single evaluation function.
+ *
+ * Single-pass algorithm:
+ * - Short-circuit on globalDeny (immediate return)
+ * - First-match for allowed/scopedDeny
+ * - Accumulates lastFailure from noMatch results
+ */
+export const MergedPolicy = <TValue, TMatch, TFailure>(
+  ...policies: Array<(value: TValue) => PolicyResult<TMatch, TFailure>>
+): (value: TValue) => PolicyResult<TMatch, TFailure> => value => {
+
+  let firstResult: PolicyResult<TMatch, TFailure> | undefined
+  let lastFailure: TFailure | undefined
+
+  for (const policy of policies) {
+
+    const result = policy(value)
+
+    if (result.outcome === 'globalDeny')
+      return result
+
+    if (firstResult === undefined && (result.outcome === 'allowed' || result.outcome === 'scopedDeny'))
+      firstResult = result
+
+    if (result.outcome === 'noMatch' && result.lastFailure !== undefined)
+      lastFailure = result.lastFailure
+  }
+
+  return firstResult ?? { outcome: 'noMatch', lastFailure }
 }

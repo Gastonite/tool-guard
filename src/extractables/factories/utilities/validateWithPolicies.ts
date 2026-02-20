@@ -1,4 +1,4 @@
-import { type EvaluateResult } from '~/policyEvaluator'
+import { type PolicyResult } from '~/policyEvaluator'
 import { type Predicate } from '~/types/Predicate'
 
 
@@ -6,13 +6,13 @@ import { type Predicate } from '~/types/Predicate'
 export const validateWithPolicies = (
   value: string,
   predicate: Predicate<string>,
-  evaluator: (value: string) => EvaluateResult<string, undefined>,
+  policy: (value: string) => PolicyResult<string, undefined>,
 ): string | undefined => {
 
   if (!predicate(value))
-    return undefined
+    return
 
-  const result = evaluator(value)
+  const result = policy(value)
 
   return result.outcome === 'allowed'
     ? result.match

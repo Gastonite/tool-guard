@@ -1,6 +1,5 @@
 import { PathExtractableFactory } from '~/extractables/factories/path'
 import { ToolGuardFactory } from '~/guard'
-import { stringPatternSchema } from '~/validation/stringPattern'
 import { PathBuildSuggestion } from './pathBuildSuggestion'
 
 
@@ -26,7 +25,6 @@ export const LSPToolGuard = ToolGuardFactory([
     name: 'filePath',
     validableFactory: PathExtractableFactory({ type: 'file', scope: 'internalUnlessExternalPrefixed' }),
     buildSuggestion: PathBuildSuggestion('filePath'),
-    patternSchema: stringPatternSchema,
   },
   'operation',
 ])

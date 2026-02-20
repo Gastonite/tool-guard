@@ -16,23 +16,19 @@ describe('Field', () => {
       expect(field.name).toBe('path')
       expect(field.buildSuggestion).toBeTypeOf('function')
       expect(field.validableFactory).toBeTypeOf('function')
-      expect(field.patternsSchema).toBeDefined()
+      expect(field.patternSchema).toBeDefined()
     })
 
-    it('patternsSchema accepts non-empty array of strings', () => {
+    it('patternSchema accepts string patterns', () => {
 
-      expect(field.patternsSchema.safeParse(['src/*']).success).toBe(true)
-      expect(field.patternsSchema.safeParse(['src/*', 'docs/*']).success).toBe(true)
+      expect(field.patternSchema.safeParse('src/*').success).toBe(true)
+      expect(field.patternSchema.safeParse('docs/*').success).toBe(true)
     })
 
-    it('patternsSchema rejects single string', () => {
+    it('patternSchema rejects non-string values', () => {
 
-      expect(field.patternsSchema.safeParse('src/*').success).toBe(false)
-    })
-
-    it('patternsSchema rejects empty array', () => {
-
-      expect(field.patternsSchema.safeParse([]).success).toBe(false)
+      expect(field.patternSchema.safeParse(['src/*']).success).toBe(false)
+      expect(field.patternSchema.safeParse(42).success).toBe(false)
     })
 
     it('buildSuggestion includes value and field name', () => {
@@ -100,7 +96,7 @@ describe('Field', () => {
       expect(field.buildSuggestion('test')).toBe('custom: test')
     })
 
-    it('wraps custom patternSchema in NonEmptyArray', () => {
+    it('passes through custom patternSchema directly', () => {
 
       const field = Field({
         name: 'command',
@@ -109,9 +105,20 @@ describe('Field', () => {
         patternSchema: z.number(),
       })
 
-      expect(field.patternsSchema.safeParse([42]).success).toBe(true)
-      expect(field.patternsSchema.safeParse(42).success).toBe(false)
-      expect(field.patternsSchema.safeParse([]).success).toBe(false)
+      expect(field.patternSchema.safeParse(42).success).toBe(true)
+      expect(field.patternSchema.safeParse('not a number').success).toBe(false)
+    })
+
+    it('defaults patternSchema to z.string() when omitted', () => {
+
+      const field = Field({
+        name: 'command',
+        validableFactory: () => acceptAll,
+        buildSuggestion: () => '',
+      })
+
+      expect(field.patternSchema.safeParse('any string').success).toBe(true)
+      expect(field.patternSchema.safeParse(42).success).toBe(false)
     })
   })
 })

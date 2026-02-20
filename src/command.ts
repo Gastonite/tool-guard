@@ -1,8 +1,8 @@
 import { z } from 'zod'
 import { type Extractable } from './extractable'
 import { type GreedyExtractable } from './extractables/greedy'
-import { acceptAll, type ParsedPolicy, PolicyEvaluator } from './policyEvaluator'
-import { type Validable } from './validable'
+import { acceptAll, MergedPolicy, PolicyFactory } from './policyEvaluator'
+import { type ValidableFactory } from './validable'
 
 
 
@@ -130,10 +130,10 @@ const matchCommandPattern = (pattern: CommandPattern, value: string): boolean =>
     const segment = segments[index]
 
     if (segment === undefined)
-      return undefined
+      return
 
     if (!remaining.startsWith(segment))
-      return undefined
+      return
 
     const afterSegment = remaining.slice(segment.length)
 
@@ -153,7 +153,7 @@ const matchCommandPattern = (pattern: CommandPattern, value: string): boolean =>
     const consumed = extractor.extract(afterSegment)
 
     if (consumed === false)
-      return undefined
+      return
 
     return matchSegment(
       afterSegment.slice(consumed),
@@ -172,7 +172,7 @@ const matchCommandPattern = (pattern: CommandPattern, value: string): boolean =>
     const consumed = extractor.extract(remaining)
 
     if (consumed === false || consumed === 0)
-      return undefined
+      return
 
     const afterToken = remaining.slice(consumed)
     const updatedTokens = [...tokens, { extractor, value: remaining.slice(0, consumed) }]
@@ -185,7 +185,7 @@ const matchCommandPattern = (pattern: CommandPattern, value: string): boolean =>
     if (afterToken.length > 0 && afterToken[0] === ' ')
       return matchSpread(extractor, afterToken.slice(1), index, updatedTokens)
 
-    return undefined
+    return
   }
 
   const matchGreedy = (
@@ -198,7 +198,7 @@ const matchCommandPattern = (pattern: CommandPattern, value: string): boolean =>
     const consumed = extractor.extract(remaining)
 
     if (consumed === false)
-      return undefined
+      return
 
     for (let length = consumed; length >= 1; length--) {
 
@@ -212,7 +212,7 @@ const matchCommandPattern = (pattern: CommandPattern, value: string): boolean =>
         return result
     }
 
-    return undefined
+    return
   }
 
   const tokens = matchSegment(value, 0, [])
@@ -339,80 +339,31 @@ export const commandPatternSchema = z.custom<CommandPattern>(isCommandPattern)
 /** Suggestion for a command field that does not match. */
 export const commandBuildSuggestion = (value: string): string => `Add a command pattern for '${value}' to allow.command`
 
-/**
- * Parses PolicyDefinition into separate Array<ParsedPolicy<CommandPattern>>.
- * One element per argument. Handles 2 forms: Array<CommandPattern>, { allow?, deny? }.
- */
-const parseCommandPolicies = (policies: Array<unknown>): Array<ParsedPolicy<CommandPattern>> | undefined => {
-
-  if (policies.length === 0)
-    return undefined
-
-  const assertCommandPatterns = (value: unknown): Array<CommandPattern> => {
-
-    if (!Array.isArray(value))
-      return []
-
-    for (const item of value)
-      if (!isCommandPattern(item))
-        throw new Error(`Expected CommandPattern, got ${typeof item}: ${String(item)}`)
-
-    return value as Array<CommandPattern>
-  }
-
-  const result: Array<ParsedPolicy<CommandPattern>> = []
-
-  for (const policy of policies) {
-
-    if (Array.isArray(policy)) {
-
-      const patterns = assertCommandPatterns(policy)
-
-      if (patterns.length > 0)
-        result.push({ allow: patterns, deny: [] })
-
-      continue
-    }
-
-    // eslint-disable-next-line no-restricted-syntax -- null check required: typeof null === 'object'
-    if (typeof policy === 'object' && policy !== null) {
-
-      const policyObject = policy as Record<string, unknown>
-      const allow = assertCommandPatterns(policyObject.allow)
-      const deny = assertCommandPatterns(policyObject.deny)
-
-      if (allow.length > 0 || deny.length > 0)
-        result.push({ allow, deny })
-    }
-  }
-
-  return result.length > 0
-    ? result
-    : undefined
-}
+/** Curried command matcher: `(pattern) => (value) => MatchResult`. */
+const CommandMatcher = (pattern: CommandPattern) => (value: string) => (
+  matchCommandPattern(pattern, value)
+    ? { matched: true as const, match: `command\`${pattern.segments.join('...')}\`` }
+    : { matched: false as const, failure: undefined }
+)
 
 /**
  * ValidableFactory for CommandPattern.
- * Receives policies (patterns = CommandPattern), returns a Validable
- * whose validate(value) calls matchCommandPattern via PolicyEvaluator.
+ * Receives policies (allow/deny of CommandPattern), returns a Validable
+ * whose validate(value) calls matchCommandPattern. Matching-only, no validation.
  */
-export const CommandValidable = (...policies: Array<unknown>): Validable => {
+export const CommandValidable: ValidableFactory<CommandPattern, string> = (...policies) => {
 
-  const parsedPolicies = parseCommandPolicies(policies)
-
-  if (parsedPolicies === undefined)
+  if (policies.length === 0)
     return acceptAll
 
-  const evaluator = PolicyEvaluator(parsedPolicies, (pattern: CommandPattern, value: string) => (
-    matchCommandPattern(pattern, value)
-      ? { matched: true, match: `command\`${pattern.segments.join('...')}\`` }
-      : { matched: false, failure: undefined }
-  ))
+  const merged = MergedPolicy(
+    ...policies.map(PolicyFactory(CommandMatcher)),
+  )
 
   return {
     validate: value => {
 
-      const result = evaluator(value)
+      const result = merged(value)
 
       return result.outcome === 'allowed'
         ? result.match

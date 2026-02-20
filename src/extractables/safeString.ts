@@ -1,8 +1,7 @@
 import { type Extractable, type ExtractableFactory } from '~/extractable'
-import { GlobPolicyEvaluator } from '~/globPolicyEvaluator'
-import { acceptAllSymbol } from '~/policyEvaluator'
+import { GlobSimplePolicy } from '~/globPolicy'
+import { acceptAllSymbol, MergedPolicy } from '~/policyEvaluator'
 import { type Predicate } from '~/types/Predicate'
-import { parseStringPolicies } from '~/utilities/parseStringPolicies'
 import { EXCLUDED_DOUBLE_QUOTE_CHARACTERS, isSafeQuotedCharacter } from './utilities/quoteCharacters'
 
 
@@ -99,21 +98,21 @@ export const defaultSafeStringExtractable: Extractable = {
  */
 export const SafeString: ExtractableFactory = (...policies) => {
 
-  const parsedPolicies = parseStringPolicies(policies)
-
-  if (parsedPolicies === undefined)
+  if (policies.length === 0)
     return defaultSafeStringExtractable
 
-  const evaluator = GlobPolicyEvaluator(parsedPolicies)
+  const merged = MergedPolicy(
+    ...policies.map(GlobSimplePolicy),
+  )
 
   return {
     extract: extractSafeString,
     validate: value => {
 
       if (!isFullyExtractableSafeString(value))
-        return undefined
+        return
 
-      const result = evaluator(unquote(value))
+      const result = merged(unquote(value))
 
       return result.outcome === 'allowed'
         ? result.match

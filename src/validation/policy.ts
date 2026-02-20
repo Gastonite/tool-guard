@@ -1,39 +1,22 @@
 import { z } from 'zod'
-import { ruleDefinitionSchema } from './rule'
-import { stringPatternSchema } from './stringPattern'
 
 
 
 /**
- * Schema for policy rules (non-empty array of rule definitions).
+ * Creates a policy definition schema: `{ allow?: NonEmptyArray<T>, deny?: NonEmptyArray<T> }`
+ * with at least one required. Empty arrays throw (config error, not "no restrictions").
  */
-// eslint-disable-next-line  import/no-unused-modules -- public API
-export const policyRulesSchema = z.array(ruleDefinitionSchema).nonempty()
 
+export const PolicyDefinitionSchema = <TSchema extends z.ZodTypeAny>(
+  patternSchema: TSchema,
+) => z.object({
 
-/**
- * Schema for policy definition ({ allow, deny } with at least one required).
- */
-export const policyDefinitionSchema = z.object({
-
-  allow: policyRulesSchema.optional(),
-  deny: policyRulesSchema.optional(),
+  allow: z.array(patternSchema).nonempty().optional(),
+  deny: z.array(patternSchema).nonempty().optional(),
 }).refine(
   policy => policy.allow !== undefined || policy.deny !== undefined,
   'Policy must have at least allow or deny',
 )
 
-
-/**
- * Schema for string-based policy definition ({ allow?, deny? } with at least one required).
- * Used by all extractable factories for runtime validation.
- */
-
-export const stringPolicyDefinitionSchema = z.object({
-
-  allow: z.array(stringPatternSchema).optional(),
-  deny: z.array(stringPatternSchema).optional(),
-}).refine(
-  policy => policy.allow !== undefined || policy.deny !== undefined,
-  'Policy must have at least allow or deny',
-)
+/** Pre-built schema for string-based policy definitions. Used by all extractable factories. */
+export const stringPolicyDefinitionSchema = PolicyDefinitionSchema(z.string())

@@ -1,120 +1,160 @@
 import { z } from 'zod'
 import { type Field } from './field'
-import { Rule, type RuleDefinition } from './rule'
+import { PolicyFactory } from './policyEvaluator'
 import { type NonEmptyArray } from './types/NonEmptyArray'
-import { policyDefinitionSchema } from './validation/policy'
+import { type RequireAtLeastOne } from './types/RequireAtLeastOne'
+import { type Validator } from './validable'
+import { PolicyDefinitionSchema } from './validation/policy'
 
 
+
+// ─── RuleDefinition (moved from rule.ts) ────────────────────────────────────
 
 /**
- * Simple policy definition with pattern values.
- * Generic: `SimplePolicyDefinition<string>` for extractables, `SimplePolicyDefinition` (unknown) for guards.
+ * A rule definition for policy matching.
+ * At least one property must be defined.
+ * Missing properties default to accept-all (no policies).
+ * `allow`/`deny` are forbidden to prevent mixing with structured format.
  */
+export type RuleDefinition<TPatternMap extends Record<string, unknown> = Record<string, unknown>> = (
+  & RequireAtLeastOne<Partial<TPatternMap>>
+  & { allow?: never; deny?: never }
+)
 
-export type SimplePolicyDefinition<TPattern = unknown> = {
-  allow?: Array<TPattern>
-  deny?: Array<TPattern>
+
+// ─── Policy Definition Types ────────────────────────────────────────────────
+
+/**
+ * Base policy definition: optional allow/deny lists of `T`.
+ * Used directly for pattern-based policies (string, CommandPattern, etc.)
+ * and via `StructuredPolicyDefinition` for rule-based policies.
+ */
+export type PolicyDefinition<T> = {
+  allow?: NonEmptyArray<T>
+  deny?: NonEmptyArray<T>
 }
 
-/**
- * Structured policy definition with explicit allow/deny rules.
- */
-export type StructuredPolicyDefinition<TPatternMap extends Record<string, unknown> = Record<string, unknown>> = {
-  allow?: NonEmptyArray<RuleDefinition<TPatternMap>>
-  deny?: NonEmptyArray<RuleDefinition<TPatternMap>>
-}
+/** Alias for rule-based policies (allow/deny lists of `RuleDefinition`). */
+export type StructuredPolicyDefinition<
+  TPatternMap extends Record<string, unknown> = Record<string, unknown>,
+> = (
+  PolicyDefinition<RuleDefinition<TPatternMap>>
+)
 
 /**
- * Union of all policy definition forms: either a SimplePolicyDefinition
+ * Union of all policy definition forms: either a PolicyDefinition
  * (allow/deny with patterns) or a StructuredPolicyDefinition (allow/deny
  * with rule definitions).
  *
- * - `{ allow: ['src/*'], deny: ['*.env'] }` → SimplePolicyDefinition
+ * - `{ allow: ['src/*'], deny: ['*.env'] }` → PolicyDefinition (simple)
  * - `{ allow: [{ path: ['src/*'] }], deny: [{ path: ['*.env'] }] }` → StructuredPolicyDefinition
  * - `{ deny: ['*.env'] }` → deny-only (global deny)
  *
  * The concrete pattern type depends on the Field (string for Read/Edit/etc.,
- * CommandPattern for Bash). Runtime validation via field.isPattern handles
+ * CommandPattern for Bash). Runtime validation via field.patternSchema handles
  * field-dependent patterns.
  */
-
-export type PolicyDefinition<TKeys extends string> = (
-  | SimplePolicyDefinition
+export type PolicyInput<TKeys extends string> = (
+  | PolicyDefinition<unknown>
   | StructuredPolicyDefinition<Record<TKeys, unknown>>
 )
 
-/**
- * Normalized policy with allow/deny rules.
- */
-export type Policy<TKeys extends string> = {
-  allow: Array<Rule<TKeys>>
-  deny: Array<Rule<TKeys>>
-}
+
+// ─── StructuredPolicyFactory ────────────────────────────────────────────────
 
 /**
- * Creates a normalized Policy from a SimplePolicyDefinition or
- * StructuredPolicyDefinition input.
+ * Factory-of-factory for guard-style policies.
  *
- * @param definition - PolicyDefinition (simple or structured)
- * @param fields - Non-empty array of normalized Fields
- * @returns Normalized Policy with allow/deny arrays
+ * Takes fields, builds a structuredSchema from their patternSchemas.
+ * Returns a factory: `(definition) → policyFn`.
+ *
+ * Simple definitions are transformed to structured, then a single construction path:
+ * validate with structuredSchema → create matchers via PolicyFactory.
+ *
+ * The Matcher inlines the AND logic across fields (ex-Rule):
+ * for each field, call validableFactory (matching-only, no validation).
  */
-export const Policy = <TKeys extends string>(
-  definition: PolicyDefinition<TKeys>,
+export const StructuredPolicyFactory = <TKeys extends string>(
   fields: NonEmptyArray<Field<TKeys>>,
-): Policy<TKeys> => {
+) => {
 
-  // SimplePolicyDefinition: { allow?: Pattern, deny?: Pattern }
-  if (isSimplePolicyDefinition(definition, fields[0].patternsSchema)) {
+  // Schema built ONCE from fields' patternSchemas
+  const fieldNames = fields.map(field => field.name)
+  const ruleDefinitionSchema = z.object(
+    Object.fromEntries(
+      fields.map(field => [field.name, z.array(field.patternSchema).nonempty().optional()]),
+    ) as Record<string, z.ZodOptional<z.ZodArray<z.ZodTypeAny>>>,
+  ).refine(
+    obj => fieldNames.some(name => (obj as Record<string, unknown>)[name] !== undefined),
+    { message: 'Rule definition must have at least one field' },
+  )
+  const structuredSchema = PolicyDefinitionSchema(ruleDefinitionSchema)
 
-    z.object({
-      allow: fields[0].patternsSchema.optional(),
-      deny: fields[0].patternsSchema.optional(),
-    }).refine(
-      policy => policy.allow !== undefined || policy.deny !== undefined,
-      'Simple policy must have at least allow or deny',
-    ).parse(definition)
+  // Matcher: RuleDefinition → (toolInput) → MatchResult
+  // AND logic across fields (replaces Rule)
+  // validableFactory is matching-only — structuredSchema already validated
+  const Matcher = (ruleDef: RuleDefinition<Record<TKeys, unknown>>) => {
 
-    const simplePolicyDefinition = definition as SimplePolicyDefinition
-    const defaultFieldName = fields[0].name
+    const _fieldMatchers = fields.map(field => {
 
-    return {
-      allow: simplePolicyDefinition.allow
-        ? [Rule({ [defaultFieldName]: simplePolicyDefinition.allow } as RuleDefinition<Record<TKeys, unknown>>, fields)]
-        : [],
-      deny: simplePolicyDefinition.deny
-        ? [Rule({ [defaultFieldName]: simplePolicyDefinition.deny } as RuleDefinition<Record<TKeys, unknown>>, fields)]
-        : [],
+      const patternValue = (ruleDef as Record<string, unknown>)[field.name]
+
+      const validator: Validator = patternValue !== undefined
+        ? field.validableFactory({ allow: patternValue } as PolicyDefinition<unknown>).validate
+        : field.validableFactory().validate
+
+      return { field, validator }
+    })
+
+    return (toolInput: Record<string, unknown>) => {
+
+      let lastField: Field<TKeys> = fields[0]
+      let lastPattern: string | symbol = ''
+
+      for (const { field, validator } of _fieldMatchers) {
+
+        const value = field.valueSchema.parse(toolInput[field.name] ?? '')
+        const pattern = validator(value)
+
+        if (pattern === undefined)
+          return {
+            matched: false as const,
+            failure: { field, value },
+          }
+
+        lastField = field
+        lastPattern = pattern
+      }
+
+      return {
+        matched: true as const,
+        match: { field: lastField, pattern: lastPattern },
+      }
     }
   }
 
-  // Explicit format: StructuredPolicyDefinition
-  policyDefinitionSchema.parse(definition)
+  const factory = PolicyFactory(Matcher)
 
-  // StructuredPolicyDefinition: { allow?: Rules, deny?: Rules }
-  if (isStructuredPolicyDefinition(definition)) {
+  return (definition: PolicyInput<TKeys>) => {
 
-    // Cast needed: TS generic inference loses TKeys through isPolicyDefinition narrowing
-    const structuredPolicyDefinition = definition as StructuredPolicyDefinition<Record<TKeys, unknown>>
+    // Try structured first, fallback to simple → structured transformation.
+    // Cast: Zod infers Record<string, unknown[]|undefined>, but PolicyFactory expects RuleDefinition.
+    // Schema already validated the shape — safe to cast.
 
-    const normalizeRules = (
-      rules: NonEmptyArray<RuleDefinition<Record<TKeys, unknown>>> | undefined,
-    ): Array<Rule<TKeys>> => {
+    try {
 
-      if (rules === undefined)
-        return []
+      return factory(structuredSchema.parse(definition) as {
+        allow?: Array<RuleDefinition<Record<TKeys, unknown>>>
+        deny?: Array<RuleDefinition<Record<TKeys, unknown>>>
+      })
+    } catch {
 
-      return rules.map(rule => Rule(rule, fields))
-    }
-
-    return {
-      allow: normalizeRules(structuredPolicyDefinition.allow),
-      deny: normalizeRules(structuredPolicyDefinition.deny),
+      return factory(structuredSchema.parse(_toStructured(definition, fields[0].name)) as {
+        allow?: Array<RuleDefinition<Record<TKeys, unknown>>>
+        deny?: Array<RuleDefinition<Record<TKeys, unknown>>>
+      })
     }
   }
-
-  // Should never reach here — all valid PolicyDefinition forms are handled above
-  throw new Error('Invalid policy input')
 }
 
 
@@ -123,67 +163,17 @@ export const Policy = <TKeys extends string>(
 // ============================================================================
 
 /**
- * Check if input is a policy definition (object with allow and/or deny).
- * Discriminant: RuleDefinition forbids allow/deny keys, so their presence identifies a policy.
+ * Transform a PolicyDefinition (simple) into a StructuredPolicyDefinition.
+ * `{ allow: ['src/*'], deny: ['*.env'] }` → `{ allow: [{ path: ['src/*'] }], deny: [{ path: ['*.env'] }] }`
  */
-const isPolicyDefinition = <TKeys extends string>(value: unknown): value is PolicyDefinition<TKeys> => (
-  typeof value === 'object'
-  // eslint-disable-next-line no-restricted-syntax -- null check required: typeof null === 'object'
-  && value !== null
-  && ('allow' in value || 'deny' in value)
-)
-
-/**
- * Check if input is a SimplePolicyDefinition.
- * All present properties (allow, deny) must be field-compatible patterns.
- */
-const isEmptyArray = (value: unknown): boolean => (
-  Array.isArray(value) && value.length === 0
-)
-
-const isPattern = (value: unknown, schema: z.ZodType): boolean => (
-  schema.safeParse(value).success
-)
-
-const isSimplePolicyDefinition = (
-  input: unknown,
-  patternSchema: z.ZodType,
-): input is SimplePolicyDefinition => (
-  isPolicyDefinition(input)
-  && (input.allow === undefined || isPattern(input.allow, patternSchema) || isEmptyArray(input.allow))
-  && (input.deny === undefined || isPattern(input.deny, patternSchema) || isEmptyArray(input.deny))
-)
-
-/**
- * Check if a value has the shape of a RuleDefinition.
- * Object with at least one key, without allow/deny.
- */
-const isRuleDefinitionShape = (value: unknown): boolean => (
-  typeof value === 'object'
-  // eslint-disable-next-line no-restricted-syntax -- null check required: typeof null === 'object'
-  && value !== null
-  && !Array.isArray(value)
-  && !('allow' in value)
-  && !('deny' in value)
-  && Object.keys(value).length > 0
-)
-
-/**
- * Check if a value is a valid rule input: RuleDefinition or Array<RuleDefinition>.
- */
-const isRuleInput = (value: unknown): boolean => (
-  isRuleDefinitionShape(value)
-  || (Array.isArray(value) && value.length > 0 && value.every(isRuleDefinitionShape))
-)
-
-/**
- * Check if input is a StructuredPolicyDefinition.
- * Positive structural check: allow/deny values must be rule inputs, not patterns.
- */
-const isStructuredPolicyDefinition = <TKeys extends string>(
-  definition: PolicyDefinition<TKeys>,
-): definition is StructuredPolicyDefinition<Record<TKeys, unknown>> => (
-  isPolicyDefinition(definition)
-  && (definition.allow === undefined || isRuleInput(definition.allow))
-  && (definition.deny === undefined || isRuleInput(definition.deny))
-)
+const _toStructured = <TKeys extends string>(
+  definition: PolicyDefinition<unknown>,
+  defaultFieldName: TKeys,
+): StructuredPolicyDefinition<Record<TKeys, unknown>> => ({
+  allow: definition.allow
+    ? [{ [defaultFieldName]: definition.allow } as RuleDefinition<Record<TKeys, unknown>>]
+    : undefined,
+  deny: definition.deny
+    ? [{ [defaultFieldName]: definition.deny } as RuleDefinition<Record<TKeys, unknown>>]
+    : undefined,
+})
