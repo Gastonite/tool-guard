@@ -1,9 +1,34 @@
 # Extractables
 
-Extractables are typed validators you plug into [`command` templates](./command-templates.md). They perform two-phase validation:
+The building blocks of [`command` templates](./command-templates.md). Each extractable knows how to parse and validate a specific type of value from a command string.
 
-1. **Extraction** (syntactic): how many characters can be parsed from the input?
-2. **Validation** (semantic): does the extracted value pass security checks and policy matching?
+```typescript
+command`git commit -m ${safeString}`          // "fix bug" → validated quoted string
+command`git add ${spread(safeFilePath)}`      // src/app.ts → validated path, scope-isolated
+command`pnpm add -D ${safePackage}`           // react@18 → validated package specifier
+```
+
+### Quick reference
+
+| Extractable | Matches | Example |
+|-------------|---------|---------|
+| `greedy` | Any safe shell characters | `git log --oneline --graph` |
+| `safeString` | Quoted string (`"..."` or `'...'`) | `git commit -m "fix bug"` |
+| `safeNumber` | Positive integer | `head -n 50 file.ts` |
+| `safeBranch` | Git branch name | `git checkout feature/login` |
+| `safePackage` | npm package specifier | `pnpm add react@18.2.0` |
+| `safeUrl` | HTTP/HTTPS URL (no credentials) | `curl https://api.example.com` |
+| `safeCommitHash` | 40 hex characters (full SHA-1) | `git show a1b2c3d4...` |
+| `safeShortHash` | 7–40 hex characters | `git cherry-pick a1b2c3d` |
+| `safeFilePath` | File path (internal + external) | `cat src/app.ts` |
+| `safeDirectoryPath` | Directory path | `ls src/components` |
+| `safeInternalFilePath` | File path (project only) | `cat src/app.ts` |
+| `safeExternalFilePath` | File path (absolute only) | `cat /etc/hosts` |
+
+Each extractable performs two-phase validation:
+
+1. **Extraction** (syntactic) — how many characters can be parsed from the input?
+2. **Validation** (semantic) — does the extracted value pass security checks and policy matching?
 
 ---
 

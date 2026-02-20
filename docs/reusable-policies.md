@@ -1,6 +1,13 @@
 # Reusable policies
 
-Since `guard.config.ts` is plain TypeScript, you can extract reusable deny/allow arrays and share them across guards — both file tools and command templates.
+`guard.config.ts` is plain TypeScript. Extract reusable arrays, compose them, share them across guards and extractables.
+
+```typescript
+const DENY_SECRETS = ['.env', '*.env', '.env.*', '**/*.pem'] as const
+
+ReadToolGuard({ allow: ['*'], deny: [...DENY_SECRETS] })
+WriteToolGuard({ allow: ['src/**'], deny: [...DENY_SECRETS] })
+```
 
 ---
 
@@ -217,9 +224,9 @@ Both approaches are valid. Policy objects are more composable when you reuse the
 
 ---
 
-## Mixing both: file policies + command policies
+## Full config: file policies + command policies
 
-A complete config using reusable arrays across both file tools and Bash:
+Bringing it all together — file tools and Bash sharing the same deny lists:
 
 ```typescript
 // guard.config.ts
@@ -256,47 +263,41 @@ export default defineGuard({
 
 ---
 
-## Preset: Vite env files
+## Preset: Vite env secrets
 
 Vite uses these env file patterns ([docs](https://vite.dev/guide/env-and-mode)):
 
-| File | Loaded |
-|------|--------|
-| `.env` | Always |
-| `.env.local` | Always, git-ignored |
-| `.env.[mode]` | Only in specified mode |
-| `.env.[mode].local` | Only in specified mode, git-ignored |
+| File | Loaded | Sensitive? |
+|------|--------|------------|
+| `.env` | Always | No — committed to git |
+| `.env.local` | Always, **git-ignored** | **Yes** |
+| `.env.[mode]` | Only in specified mode | No — committed to git |
+| `.env.[mode].local` | Only in specified mode, **git-ignored** | **Yes** |
 
-Because of **OneOrMany**, a single pattern like `*.env` won't match `.env`. Here's a complete preset:
+Only `.local` files contain secrets. The others (`.env`, `.env.development`, `.env.production`) are meant to be committed and typically contain non-sensitive defaults.
 
 ```typescript
 /**
- * Deny all Vite env files.
+ * Deny Vite env secrets (.local files only).
  *
- * Covers the 4 Vite patterns:
- * - .env                    → exact match
- * - .env.local              → .env.* pattern
- * - .env.development        → .env.* pattern
- * - .env.production         → .env.* pattern
- * - .env.staging            → .env.* pattern
- * - .env.development.local  → .env.* pattern
- * - .env.production.local   → .env.* pattern
- * - database.env            → *.env pattern
+ * Covers:
+ * - .env.local                   → .env.local (exact)
+ * - .env.development.local       → .env.*.local pattern
+ * - .env.production.local        → .env.*.local pattern
+ * - .env.staging.local           → .env.*.local pattern
  *
  * Also matches deeply nested variants:
- * - config/.env             → **\/.env pattern
- * - packages/app/.env.local → **\/.env.* pattern
+ * - config/.env.local            → **\/.env.local pattern
+ * - packages/app/.env.prod.local → **\/.env.*.local pattern
  */
-export const DENY_VITE_ENV = [
+export const DENY_VITE_ENV_SECRETS = [
   // Root level
-  '.env',       // exact: .env
-  '*.env',      // suffixed: production.env, staging.env
-  '.env.*',     // prefixed: .env.local, .env.production, .env.development.local
+  '.env.local',       // exact: .env.local
+  '.env.*.local',     // mode-specific: .env.development.local, .env.production.local
 
   // Nested in subdirectories
-  '**/.env',    // nested exact: config/.env, packages/app/.env
-  '**/*.env',   // nested suffixed: config/production.env
-  '**/.env.*',  // nested prefixed: packages/app/.env.local
+  '**/.env.local',    // nested exact: config/.env.local
+  '**/.env.*.local',  // nested mode-specific: packages/app/.env.staging.local
 ] as const
 ```
 
@@ -307,12 +308,12 @@ import { defineGuard } from 'tool-guard/guard'
 import { ReadToolGuard } from 'tool-guard/guards/read'
 import { WriteToolGuard } from 'tool-guard/guards/write'
 import { EditToolGuard } from 'tool-guard/guards/edit'
-import { DENY_VITE_ENV } from './deny-patterns'
+import { DENY_VITE_ENV_SECRETS } from './deny-patterns'
 
 export default defineGuard({
-  Read: ReadToolGuard({ allow: ['*'], deny: [...DENY_VITE_ENV] }),
-  Write: WriteToolGuard({ allow: ['*'], deny: [...DENY_VITE_ENV] }),
-  Edit: EditToolGuard({ allow: ['*'], deny: [...DENY_VITE_ENV] }),
+  Read: ReadToolGuard({ allow: ['*'], deny: [...DENY_VITE_ENV_SECRETS] }),
+  Write: WriteToolGuard({ allow: ['*'], deny: [...DENY_VITE_ENV_SECRETS] }),
+  Edit: EditToolGuard({ allow: ['*'], deny: [...DENY_VITE_ENV_SECRETS] }),
 })
 ```
 
@@ -320,29 +321,13 @@ export default defineGuard({
 
 | File | Blocked? | Matched by |
 |------|----------|------------|
-| `.env` | **yes** | `.env` (exact) |
-| `.env.local` | **yes** | `.env.*` |
-| `.env.development` | **yes** | `.env.*` |
-| `.env.production` | **yes** | `.env.*` |
-| `.env.staging` | **yes** | `.env.*` |
-| `.env.development.local` | **yes** | `.env.*` |
-| `.env.production.local` | **yes** | `.env.*` |
-| `database.env` | **yes** | `*.env` |
-| `config/.env` | **yes** | `**/.env` |
-| `packages/app/.env.local` | **yes** | `**/.env.*` |
+| `.env.local` | **yes** | `.env.local` (exact) |
+| `.env.development.local` | **yes** | `.env.*.local` |
+| `.env.production.local` | **yes** | `.env.*.local` |
+| `.env.staging.local` | **yes** | `.env.*.local` |
+| `config/.env.local` | **yes** | `**/.env.local` |
+| `packages/app/.env.prod.local` | **yes** | `**/.env.*.local` |
+| `.env` | no | — (committed, not sensitive) |
+| `.env.development` | no | — (committed, not sensitive) |
+| `.env.production` | no | — (committed, not sensitive) |
 | `src/app.ts` | no | — |
-| `.envrc` | no | — (not `.env.*`, the `rc` is after `env` not after `.env.`) |
-
-### Important: `.envrc` is NOT matched
-
-`.envrc` does **not** match `.env.*` because picomatch treats `.` as a literal character. `.env.*` matches `.env.` followed by one or more characters. `.envrc` is `.env` followed by `rc` without a `.` separator — it matches `*.env*` but not `.env.*`.
-
-If you also want to block `.envrc` (used by direnv), add it explicitly:
-
-```typescript
-export const DENY_VITE_ENV_PLUS_DIRENV = [
-  ...DENY_VITE_ENV,
-  '.envrc',
-  '**/.envrc',
-] as const
-```
