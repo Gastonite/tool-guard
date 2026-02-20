@@ -31,3 +31,6 @@ coverage/
 
 *.local.ts
 *.local.json
+
+
+TODO.md

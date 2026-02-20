@@ -1,6 +1,6 @@
 {
   "name": "tool-guard",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Reliable permission system for Claude Code using PreToolUse hooks",
   "keywords": [
     "claude",
