@@ -1,11 +1,11 @@
-import * as esbuild from 'esbuild'
 import { readdir } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
+import { type BuildOptions, build } from 'esbuild'
 
 
 
 // Common options
-const common: esbuild.BuildOptions = {
+const common: BuildOptions = {
   platform: 'node',
   target: 'node18',
   format: 'esm',
@@ -13,7 +13,7 @@ const common: esbuild.BuildOptions = {
 }
 
 // Bundle the CLI (single file for performance)
-const buildCli = () => esbuild.build({
+const buildCli = () => build({
   ...common,
   entryPoints: ['src/cli.ts'],
   outfile: 'dist/cli.js',
@@ -72,7 +72,7 @@ const buildLibrary = async () => {
       ...await getEntryPoints(directory),
     )
 
-  return esbuild.build({
+  return build({
     ...common,
     entryPoints,
     outdir: 'dist',
