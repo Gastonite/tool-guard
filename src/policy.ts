@@ -7,11 +7,13 @@ import { policyDefinitionSchema } from './validation/policy'
 
 
 /**
- * Simple policy definition with pattern values (field-dependent type).
+ * Simple policy definition with pattern values.
+ * Generic: `SimplePolicyDefinition<string>` for extractables, `SimplePolicyDefinition` (unknown) for guards.
  */
-type SimplePolicyDefinition = {
-  allow?: unknown
-  deny?: unknown
+
+export type SimplePolicyDefinition<TPattern = unknown> = {
+  allow?: Array<TPattern>
+  deny?: Array<TPattern>
 }
 
 /**

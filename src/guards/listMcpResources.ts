@@ -8,6 +8,6 @@ import { ToolGuardFactory } from '~/guard'
  *
  * @example
  * // Allow listing resources from specific MCP servers
- * ListMcpResources: ListMcpResourcesToolGuard(['my-server', 'another-server'])
+ * ListMcpResources: ListMcpResourcesToolGuard({ allow: ['my-server', 'another-server'] })
  */
 export const ListMcpResourcesToolGuard = ToolGuardFactory(['server'])

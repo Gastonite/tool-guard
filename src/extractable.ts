@@ -1,3 +1,4 @@
+import { type SimplePolicyDefinition } from './policy'
 import { type Validable } from './validable'
 
 
@@ -9,4 +10,4 @@ export type Extractable = (
 )
 
 /** Creates an Extractable, optionally configured with allow/deny policies. */
-export type ExtractableFactory = (...policies: Array<unknown>) => Extractable
+export type ExtractableFactory = (...policies: Array<SimplePolicyDefinition<string>>) => Extractable

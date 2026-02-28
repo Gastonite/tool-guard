@@ -28,14 +28,14 @@ describe('safePath', () => {
 
     it('matches allow pattern', () => {
 
-      const instance = SafePath(['src/**'])
+      const instance = SafePath({ allow: ['src/**'] })
 
       expect(instance.validate('src/app.ts')).toBe('src/**')
     })
 
     it('supports external: prefix', () => {
 
-      const instance = SafePath(['external:/tmp/**'])
+      const instance = SafePath({ allow: ['external:/tmp/**'] })
 
       expect(instance.validate('/tmp/file.txt')).toBe('/tmp/**')
     })

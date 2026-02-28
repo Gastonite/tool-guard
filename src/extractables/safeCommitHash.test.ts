@@ -60,14 +60,14 @@ describe('SafeCommitHash', () => {
 
   it('allowed: matches allow pattern', () => {
 
-    const instance = SafeCommitHash([`${validHash}`])
+    const instance = SafeCommitHash({ allow: [`${validHash}`] })
 
     expect(instance.validate(validHash)).toBe(validHash)
   })
 
   it('noMatch: rejects when no allow pattern matches', () => {
 
-    const instance = SafeCommitHash([`${validHash}`])
+    const instance = SafeCommitHash({ allow: [`${validHash}`] })
 
     expect(instance.validate('b'.repeat(40))).toBeUndefined()
   })
